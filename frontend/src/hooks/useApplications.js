@@ -19,6 +19,15 @@ export function computeDeadlineParams(deadline, day) {
   }
 
   const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
 
   if (deadline === "week") {
     if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
@@ -32,24 +41,24 @@ export function computeDeadlineParams(deadline, day) {
     }
 
     const endOfWeek = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 8,
+      startOfToday.getFullYear(),
+      startOfToday.getMonth(),
+      startOfToday.getDate() + 8,
       0,
       0,
       0,
       0
     );
     return {
-      dueFrom: now.toISOString(),
+      dueFrom: startOfToday.toISOString(),
       dueTo: endOfWeek.toISOString(),
     };
   }
 
   if (deadline === "month") {
     const startOfNextMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
+      startOfToday.getFullYear(),
+      startOfToday.getMonth() + 1,
       1,
       0,
       0,
@@ -57,14 +66,14 @@ export function computeDeadlineParams(deadline, day) {
       0
     );
     return {
-      dueFrom: now.toISOString(),
+      dueFrom: startOfToday.toISOString(),
       dueTo: startOfNextMonth.toISOString(),
     };
   }
 
   if (deadline === "year") {
     const startOfNextYear = new Date(
-      now.getFullYear() + 1,
+      startOfToday.getFullYear() + 1,
       0,
       1,
       0,
@@ -73,7 +82,7 @@ export function computeDeadlineParams(deadline, day) {
       0
     );
     return {
-      dueFrom: now.toISOString(),
+      dueFrom: startOfToday.toISOString(),
       dueTo: startOfNextYear.toISOString(),
     };
   }

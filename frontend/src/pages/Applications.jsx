@@ -215,9 +215,7 @@ export default function Applications() {
           <div>
             {/* Cards Grid */}
             <div
-              className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch transition-opacity duration-150 ${
-                isPlaceholderData ? "opacity-60" : "opacity-100"
-              }`}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch opacity-100"
               aria-busy={isPlaceholderData}
             >
               {applications.map((app, index) => {
