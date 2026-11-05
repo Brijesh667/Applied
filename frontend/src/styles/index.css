@@ -1,0 +1,724 @@
+@import "tailwindcss";
+@import "@fontsource-variable/schibsted-grotesk";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme {
+  --font-sans: "Schibsted Grotesk Variable", "Schibsted Grotesk", system-ui, -apple-system, sans-serif;
+
+  --color-paper: var(--color-paper);
+  --color-surface: var(--color-surface);
+  --color-sunken: var(--color-sunken);
+  --color-rule: var(--color-rule);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-placeholder: var(--color-placeholder);
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-on-primary: var(--color-on-primary);
+  --color-primary-soft: var(--color-primary-soft);
+  --color-primary-tint: var(--color-primary-tint);
+  --color-danger: var(--color-danger);
+  --color-danger-bg: var(--color-danger-bg);
+  --color-danger-tint: var(--color-danger-tint);
+  --color-danger-hover: var(--color-danger-hover);
+
+  --color-status-applied-fg: var(--color-status-applied-fg);
+  --color-status-applied-bg: var(--color-status-applied-bg);
+  --color-status-in-process-fg: var(--color-status-in-process-fg);
+  --color-status-in-process-bg: var(--color-status-in-process-bg);
+  --color-status-offer-fg: var(--color-status-offer-fg);
+  --color-status-offer-bg: var(--color-status-offer-bg);
+  --color-status-rejected-fg: var(--color-status-rejected-fg);
+  --color-status-rejected-bg: var(--color-status-rejected-bg);
+
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --radius-pill: 9999px;
+
+  --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.18);
+  --shadow-lift: var(--shadow-lift);
+
+  --ease-default: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-press: 90ms;
+  --dur-hover: 180ms;
+  --dur-ripple: 520ms;
+  --duration-micro: 120ms;
+  --duration-state: 200ms;
+}
+
+html {
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--color-rule) transparent;
+}
+
+:root {
+  color-scheme: light;
+  --color-paper: #F4F7FB;
+  --color-surface: #FFFFFF;
+  --color-sunken: #E9EEF6;
+  --color-rule: #D5DEEB;
+  --color-ink: #0F1B2D;
+  --color-ink-soft: #52627A;
+  --color-placeholder: #5B6B84;
+  --color-primary: #1D4ED8;
+  --color-primary-hover: #1E40AF;
+  --color-on-primary: #FFFFFF;
+  --color-primary-soft: #E3ECFD;
+  --color-primary-tint: #9DB8F2;
+  --color-danger: #BC3626;
+  --color-danger-bg: #FCE8E5;
+  --color-danger-tint: #EFA79D;
+  --color-danger-hover: #A62B1D;
+
+  --color-status-applied-fg: #405270;
+  --color-status-applied-bg: #E4E9F2;
+  --color-status-in-process-fg: #5B3FC4;
+  --color-status-in-process-bg: #ECE8FB;
+  --color-status-offer-fg: #166B3C;
+  --color-status-offer-bg: #DAF1E3;
+  --color-status-rejected-fg: #9B2F44;
+  --color-status-rejected-bg: #F8DEE3;
+
+  --outline-focus: var(--color-primary);
+
+  /* Interaction & motion tokens */
+  --topbar-h: 56px;
+  --glow-rgb: 29 78 216;
+  --glow-alpha-page: 0.08;
+  --glow-alpha-card: 0.10;
+  --hero-glow-alpha: 0.10;
+  --shadow-lift: 0 10px 24px rgb(15 27 45 / 0.10);
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-press: 90ms;
+  --dur-hover: 180ms;
+  --dur-ripple: 520ms;
+
+  /* Auth dialog tokens */
+  --backdrop: rgb(0 0 0 / 0.06);
+  --backdrop-auth: var(--backdrop);
+  --shadow-dialog-auth: 0 24px 64px rgb(0 0 0 / 0.35);
+  --auth-bg: #0F1B2D;
+  --auth-field: #18283F;
+  --auth-border: #2A3A58;
+  --auth-border-hover: #3F5E96;
+  --auth-ink: #E6EDF7;
+  --auth-ink-soft: #9FB0C8;
+  --auth-primary: #5B9CFF;
+  --auth-primary-hover: #7BB0FF;
+  --auth-on-primary: #08111F;
+  --auth-glow: 91 156 255;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #0B1220;
+  --color-surface: #111A2E;
+  --color-sunken: #0A101C;
+  --color-rule: #24324D;
+  --color-ink: #E6EDF7;
+  --color-ink-soft: #9FB0C8;
+  --color-placeholder: #8496B0;
+  --color-primary: #5B9CFF;
+  --color-primary-hover: #7BB0FF;
+  --color-on-primary: #08111F;
+  --color-primary-soft: #172A4D;
+  --color-primary-tint: #2F4F8F;
+  --color-danger: #FF7A6B;
+  --color-danger-bg: #3A1C22;
+  --color-danger-tint: #7A3039;
+  --color-danger-hover: #FF6352;
+
+  --color-status-applied-fg: #A9B8D0;
+  --color-status-applied-bg: #1D2940;
+  --color-status-in-process-fg: #B9A9FF;
+  --color-status-in-process-bg: #251F4D;
+  --color-status-offer-fg: #7DDBA3;
+  --color-status-offer-bg: #12301F;
+  --color-status-rejected-fg: #F2A0B0;
+  --color-status-rejected-bg: #3A1B25;
+
+  --outline-focus: var(--color-primary);
+
+  /* Interaction & motion tokens */
+  --topbar-h: 56px;
+  --glow-rgb: 91 156 255;
+  --glow-alpha-page: 0.14;
+  --glow-alpha-card: 0.15;
+  --hero-glow-alpha: 0.14;
+  --shadow-lift: 0 10px 24px rgb(0 0 0 / 0.45);
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-press: 90ms;
+  --dur-hover: 180ms;
+  --dur-ripple: 520ms;
+
+  /* Auth dialog tokens */
+  --backdrop: rgb(0 0 0 / 0.12);
+  --backdrop-auth: var(--backdrop);
+  --shadow-dialog-auth: 0 24px 64px rgb(0 0 0 / 0.35);
+  --auth-bg: #050A14;
+  --auth-field: #0D1626;
+  --auth-border: #2A3A58;
+  --auth-border-hover: #3F5E96;
+  --auth-ink: #E6EDF7;
+  --auth-ink-soft: #9FB0C8;
+  --auth-primary: #5B9CFF;
+  --auth-primary-hover: #7BB0FF;
+  --auth-on-primary: #08111F;
+  --auth-glow: 91 156 255;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --topbar-h: 64px;
+  }
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+}
+
+/* Tabular numbers for stats, dates, counters, pay */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ensure native date picker calendar icon is visible in dark mode */
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
+}
+
+/* Selection style */
+::selection {
+  background-color: var(--color-primary-soft);
+  color: var(--color-ink);
+}
+
+/* Visible keyboard focus outline */
+:focus-visible {
+  outline: 2px solid var(--outline-focus);
+  outline-offset: 2px;
+}
+
+/* Route transition progress line along header top edge */
+@keyframes route-progress {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  60% {
+    transform: scaleX(0.75);
+    opacity: 1;
+  }
+  85% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+.route-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-primary);
+  transform-origin: left center;
+  animation: route-progress 350ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* Subtle ambient radial glow behind the public landing hero */
+.hero-radial-glow {
+  background-image: radial-gradient(
+    ellipse 75% 65% at 50% 30%,
+    rgb(var(--glow-rgb) / var(--hero-glow-alpha, 0.10)),
+    transparent 70%
+  );
+}
+
+/* Global reduced-motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .app-card,
+  .app-card:hover,
+  .app-card:active,
+  .app-card:has(a:focus-visible),
+  .card-fx,
+  .card-fx-tilt,
+  .card-fx-tilt:hover,
+  .card-fx-tilt:active,
+  .btn-interactive,
+  .btn-interactive:hover,
+  .btn-interactive:active,
+  .btn-interactive.is-pressed,
+  .btn-icon-plus,
+  .btn-icon-default,
+  .icon-btn-icon {
+    transform: none !important;
+  }
+
+  .app-card::before,
+  .card-fx::before,
+  .btn-ripple,
+  .card-spotlight,
+  .page-cursor-glow,
+  .route-progress-bar {
+    display: none !important;
+    animation: none !important;
+  }
+}
+
+/* Reduced motion keyframe for card entrance: opacity only, no movement */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes card-slide-up {
+    0% {
+      opacity: 0;
+      transform: none;
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* ==========================================================================
+   Card Interactions (Shared 3D tilt + cursor glow)
+   ========================================================================== */
+
+/* Glow spotlight base */
+.card-fx {
+  position: relative;
+  transition: border-color var(--dur-hover) var(--ease-out);
+}
+
+.card-fx::before,
+.app-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    200px circle at var(--mx, -9999px) var(--my, -9999px),
+    rgb(var(--glow-rgb) / var(--glow-alpha-card)),
+    transparent 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms var(--ease-out);
+  z-index: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-fx:hover::before,
+  .app-card:hover::before {
+    opacity: 1;
+  }
+}
+
+/* 3D tilt + glow */
+.card-fx-tilt,
+.app-card {
+  --rx: 0deg;
+  --ry: 0deg;
+  position: relative;
+  container-type: inline-size;
+  transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(0px);
+  transition: transform 200ms var(--ease-out),
+              border-color var(--dur-hover) var(--ease-out);
+}
+
+/* Card Mark as done button: full-width on card container widths under 260px */
+@container (max-width: 260px) {
+  .app-card-mark-done-btn {
+    width: 100% !important;
+  }
+}
+
+/* Pointer device hover for tilted cards */
+@media (hover: hover) and (pointer: fine) {
+  .card-fx-tilt:hover,
+  .app-card:hover {
+    transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-2px);
+    border-color: var(--color-ink-soft);
+    will-change: transform;
+    transition: transform 0s, border-color var(--dur-hover) var(--ease-out);
+  }
+
+  .card-fx-tilt:hover .card-company-link,
+  .app-card:hover .card-company-link {
+    background-size: 100% 1.5px;
+  }
+
+  .card-fx-tilt:active,
+  .app-card:active {
+    transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(0px) scale(0.995);
+    transition-duration: var(--dur-press);
+  }
+}
+
+/* Company link left-to-right underline */
+.card-company-link {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 0% 1.5px;
+  transition: background-size var(--dur-hover) var(--ease-out);
+  text-decoration: none !important;
+}
+
+/* Newly loaded cards entrance animation (staggered 8px slide-up + fade) */
+@keyframes card-slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-card-enter {
+  animation: card-slide-up 200ms var(--ease-out) both;
+}
+
+/* ==========================================================================
+   Button Interactions & Ripples
+   ========================================================================== */
+
+/* Interactive button base */
+.btn-interactive {
+  position: relative;
+  transition: transform var(--dur-hover) var(--ease-out),
+              background-color var(--dur-hover) var(--ease-out),
+              border-color var(--dur-hover) var(--ease-out),
+              color var(--dur-hover) var(--ease-out);
+  will-change: transform;
+}
+
+/* Button shadow underlay */
+.btn-interactive::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  transition: opacity var(--dur-hover) var(--ease-out);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Hover effects for pointer devices */
+@media (hover: hover) and (pointer: fine) {
+  .btn-lift:not(:disabled):not([data-loading="true"]):hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-lift:not(:disabled):not([data-loading="true"]):hover::before {
+    opacity: 1;
+  }
+
+  .btn-primary:not(:disabled):not([data-loading="true"]):hover {
+    background-color: var(--color-primary-hover);
+  }
+
+  .btn-secondary:not(:disabled):not([data-loading="true"]):hover {
+    border-color: var(--color-ink);
+    background-color: var(--color-sunken);
+  }
+
+  .btn-danger:not(:disabled):not([data-loading="true"]):hover {
+    background-color: var(--color-danger-hover);
+  }
+
+  .btn-ghost:not(:disabled):not([data-loading="true"]):hover {
+    background-color: var(--color-sunken);
+  }
+
+  .icon-btn:not(:disabled):not([data-loading="true"]):hover {
+    background-color: var(--color-sunken);
+  }
+
+  .icon-btn:not(:disabled):not([data-loading="true"]):hover .icon-btn-icon {
+    transform: scale(1.08);
+  }
+
+  .btn-interactive:not(:disabled):not([data-loading="true"]):hover .btn-icon-plus {
+    transform: rotate(90deg);
+  }
+
+  .btn-interactive:not(:disabled):not([data-loading="true"]):hover .btn-icon-default {
+    transform: scale(1.1);
+  }
+}
+
+/* Icon hover transitions */
+.btn-icon-plus,
+.btn-icon-default,
+.icon-btn-icon {
+  transition: transform var(--dur-hover) var(--ease-out);
+  will-change: transform;
+}
+
+/* Button active / press feedback (all devices including touch) */
+.btn-interactive:not(:disabled):not([data-loading="true"]):active,
+.btn-interactive:not(:disabled):not([data-loading="true"]).is-pressed {
+  transform: scale(0.97);
+  transition-duration: var(--dur-press);
+}
+
+/* Ripple effect container (overflow: hidden without clipping outer button focus outline) */
+.btn-ripple-container {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Individual ripple element */
+.btn-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background-color: currentColor;
+  pointer-events: none;
+  transform: scale(0);
+  animation: btn-ripple-anim var(--dur-ripple) var(--ease-out) forwards;
+  --ripple-peak: 0.16;
+}
+
+.btn-ripple-primary {
+  --ripple-peak: 0.24;
+}
+
+@keyframes btn-ripple-anim {
+  0% {
+    transform: scale(0);
+    opacity: var(--ripple-peak);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Landing Page Typography Hierarchy & Spacing System
+   ========================================================================== */
+.landing-h1 {
+  font-size: 36px;
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+}
+@media (min-width: 768px) {
+  .landing-h1 {
+    font-size: 56px;
+  }
+}
+
+.landing-h2 {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-ink);
+  margin-bottom: 32px;
+}
+@media (min-width: 768px) {
+  .landing-h2 {
+    font-size: 36px;
+    margin-bottom: 48px;
+  }
+}
+
+.landing-h3 {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+@media (min-width: 768px) {
+  .landing-h3 {
+    font-size: 28px;
+  }
+}
+
+.landing-body {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+}
+@media (min-width: 768px) {
+  .landing-body {
+    font-size: 18px;
+  }
+}
+
+.landing-section {
+  padding-top: 64px;
+  padding-bottom: 64px;
+}
+@media (min-width: 768px) {
+  .landing-section {
+    padding-top: 96px;
+    padding-bottom: 96px;
+  }
+}
+
+/* Auth dialog see-through backdrop & open animation */
+.auth-dialog::backdrop {
+  background-color: var(--backdrop-auth);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@keyframes auth-dialog-open {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes auth-dialog-open {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+.auth-dialog[open] {
+  animation: auth-dialog-open 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transform-origin: center center;
+}
+
+/* Auth dialog distinct surface, token scoping and glow */
+.auth-dialog {
+  color-scheme: dark;
+  background-color: var(--auth-bg) !important;
+  border-color: var(--auth-border) !important;
+  color: var(--auth-ink) !important;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.35);
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+
+  /* Scoped token remapping */
+  --color-surface: var(--auth-field);
+  --color-sunken: var(--auth-field);
+  --color-paper: var(--auth-bg);
+  --color-rule: var(--auth-border);
+  --color-ink: var(--auth-ink);
+  --color-ink-soft: var(--auth-ink-soft);
+  --color-placeholder: var(--auth-ink-soft);
+  --color-primary: var(--auth-primary);
+  --color-primary-hover: var(--auth-primary-hover);
+  --color-on-primary: var(--auth-on-primary);
+
+  /* Danger tokens inside auth dialog that pass AA on dark background */
+  --color-danger: #FF7A6B;
+  --color-danger-bg: #3A1C22;
+  --color-danger-tint: #7A3039;
+  --color-danger-hover: #FF6352;
+}
+
+/* Hover glow: fine pointer & hover capable */
+@media (hover: hover) and (pointer: fine) {
+  .auth-dialog:hover {
+    border-color: var(--auth-border-hover) !important;
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.35), 0 0 24px 2px rgb(var(--auth-glow) / 0.35);
+  }
+}
+
+/* Typing / Focus-within state (wins over hover) */
+@keyframes auth-dialog-pulse {
+  0%, 100% {
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.35), 0 0 24px 2px rgb(var(--auth-glow) / 0.4);
+  }
+  50% {
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.35), 0 0 36px 6px rgb(var(--auth-glow) / 0.6);
+  }
+}
+
+.auth-dialog:focus-within {
+  border-color: var(--auth-primary) !important;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.35), 0 0 30px 4px rgb(var(--auth-glow) / 0.5);
+  animation: auth-dialog-pulse 2s ease-in-out infinite;
+}
+
+/* Input focus ring inside auth dialog */
+.auth-dialog input:focus,
+.auth-dialog input:focus-visible {
+  border-color: var(--auth-primary) !important;
+  box-shadow: 0 0 0 3px rgb(var(--auth-glow) / 0.25) !important;
+  outline: none !important;
+}
+
+/* Keyboard visible focus ring on buttons and links */
+.auth-dialog button:focus-visible,
+.auth-dialog a:focus-visible {
+  outline: 2px solid var(--auth-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* WebKit autofill styling override so inputs stay dark */
+.auth-dialog input:-webkit-autofill,
+.auth-dialog input:-webkit-autofill:hover,
+.auth-dialog input:-webkit-autofill:focus,
+.auth-dialog input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--auth-field) inset !important;
+  box-shadow: 0 0 0 1000px var(--auth-field) inset !important;
+  -webkit-text-fill-color: var(--auth-ink) !important;
+  caret-color: var(--auth-ink) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Reduced motion overrides */
+@media (prefers-reduced-motion: reduce) {
+  .auth-dialog {
+    transition: none !important;
+  }
+  .auth-dialog:focus-within {
+    animation: none !important;
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.35), 0 0 30px 4px rgb(var(--auth-glow) / 0.5) !important;
+  }
+}
+
+
+

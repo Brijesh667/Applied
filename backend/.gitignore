@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+cookies*.txt
+*.log
+
+# Specific ignored backend scripts
+scripts/smoke-test.js
+scripts/predeploy-check.js
+scripts/seed-rahul.js
+scripts/seed-dashboard-data.js

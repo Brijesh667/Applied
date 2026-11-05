@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production builds
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs and databases
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+cookies*.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE and Editor files
+.vscode/
+.idea/
+
+# Testing, audits, reports and screenshots
+coverage/
+screenshots/
+docs/PREDEPLOY_REPORT.md
+component_color.md
+audit_task.txt
+test-results/
+playwright-report/
+blob-report/
+
+# Ad-hoc test and verification scripts
+/scripts/
+backend/scripts/smoke-test.js
+backend/scripts/predeploy-check.js
+backend/scripts/seed-rahul.js
+backend/scripts/seed-dashboard-data.js
+frontend/e2e/
+
+# Prompt and audit markdown files
+part*.md
+*prompt*.md
