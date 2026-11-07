@@ -55,8 +55,34 @@ export const statsApi = {
   },
 };
 
+export const resumesApi = {
+  list: async () => {
+    return api.get("/resumes");
+  },
+  get: async (id) => {
+    const res = await api.get(`/resumes/${id}`);
+    return res?.resume ?? res;
+  },
+  upload: async (formData) => {
+    return api.post("/resumes", { body: formData });
+  },
+  update: async (id, body) => {
+    return api.patch(`/resumes/${id}`, { body });
+  },
+  reparse: async (id) => {
+    return api.post(`/resumes/${id}/reparse`);
+  },
+  download: async (id) => {
+    return api.get(`/resumes/${id}/download`);
+  },
+  remove: async (id) => {
+    return api.delete(`/resumes/${id}`);
+  },
+};
+
 export default {
   auth: authApi,
   applications: applicationsApi,
   stats: statsApi,
+  resumes: resumesApi,
 };

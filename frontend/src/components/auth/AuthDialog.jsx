@@ -105,17 +105,16 @@ export function AuthDialog() {
     }
     cleanupScrollLock();
 
-    if (location.state?.authOpenedInApp) {
-      navigate(-1);
-    } else {
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("auth");
-      const search = newParams.toString();
-      navigate(`${location.pathname}${search ? `?${search}` : ""}`, {
-        replace: true,
-        state: location.state,
-      });
-    }
+    // Always use URL-based navigation to remove the ?auth= param.
+    // Previously used navigate(-1) for authOpenedInApp, but that can close
+    // the browser tab if there is no previous history entry (e.g. fresh tab).
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("auth");
+    const search = newParams.toString();
+    navigate(`${location.pathname}${search ? `?${search}` : ""}`, {
+      replace: true,
+      state: location.state,
+    });
 
     if (openerRef.current && typeof openerRef.current.focus === "function") {
       openerRef.current.focus();

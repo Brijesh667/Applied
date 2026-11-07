@@ -6,7 +6,10 @@
  * Automatically hides any field without a value.
  */
 import React from "react";
+import { Link } from "react-router-dom";
 import { formatDate, formatPay, splitSkills } from "../../lib/format.js";
+import { useResumes } from "../../hooks/useResumes.js";
+import { Skeleton } from "../ui/Skeleton.jsx";
 import { cn } from "../../lib/cn.js";
 
 function getHostname(urlStr) {
@@ -22,6 +25,12 @@ function getHostname(urlStr) {
 
 export function DetailsPanel({ application, className = "" }) {
   if (!application) return null;
+
+  const { data: resumesData, isLoading: isLoadingResumes } = useResumes();
+  const resumesList = resumesData?.resumes || [];
+  const linkedResume = application.resumeId
+    ? resumesList.find((r) => (r._id || r.id) === application.resumeId)
+    : null;
 
   const skills = splitSkills(application.skills);
   const formattedPay = formatPay(application.pay);
@@ -177,6 +186,36 @@ export function DetailsPanel({ application, className = "" }) {
             </dt>
             <dd className="text-[14px] leading-[20px] text-ink-soft whitespace-pre-wrap break-words max-w-[65ch]">
               {application.notes}
+            </dd>
+          </div>
+        )}
+
+        {/* Resume used */}
+        {application.resumeId && (
+          <div
+            className={cn(
+              (hasGridFields ||
+                application.jobLink ||
+                skills.length > 0 ||
+                application.description ||
+                application.notes) &&
+                "pt-3.5 border-t border-rule/60"
+            )}
+          >
+            <dt className="text-[12px] leading-[16px] text-ink-soft font-medium mb-1">
+              Resume used
+            </dt>
+            <dd className="text-[14px] leading-[20px]">
+              {isLoadingResumes ? (
+                <Skeleton className="h-5 w-32 rounded-[4px]" />
+              ) : linkedResume ? (
+                <Link
+                  to="/resumes"
+                  className="inline-flex items-center gap-1.5 font-medium text-ink hover:underline focus:outline-none focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 rounded-[4px]"
+                >
+                  {linkedResume.label || linkedResume.fileName}
+                </Link>
+              ) : null}
             </dd>
           </div>
         )}

@@ -43,8 +43,12 @@ async function request(path, options = {}) {
   };
 
   if (body !== undefined) {
-    fetchOptions.headers["Content-Type"] = "application/json";
-    fetchOptions.body = JSON.stringify(body);
+    if (typeof FormData !== "undefined" && body instanceof FormData) {
+      fetchOptions.body = body;
+    } else {
+      fetchOptions.headers["Content-Type"] = "application/json";
+      fetchOptions.body = JSON.stringify(body);
+    }
   }
 
   let response;

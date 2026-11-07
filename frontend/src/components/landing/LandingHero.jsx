@@ -11,7 +11,7 @@
  * - Animated fade-up on scroll reveal.
  */
 import React, { useMemo } from "react";
-import { Button } from "../ui/Button.jsx";
+import { GradientButton } from "../ui/GradientButton.jsx";
 import { ReplyTypeBadge } from "../ui/ReplyTypeBadge.jsx";
 import { DueChip } from "../ui/DueChip.jsx";
 import { useCardFx } from "../../hooks/useCardFx.js";
@@ -210,14 +210,12 @@ export function LandingHero({ onOpenRegister }) {
             </p>
 
             <div className="mt-9">
-              <Button
-                size="lg"
-                variant="primary"
+              <GradientButton
                 onClick={onOpenRegister}
-                className="h-12 px-6 text-[16px] font-semibold hover:-translate-y-[1px] active:scale-[0.98] transition-all motion-reduce:transform-none"
+                className="motion-reduce:transform-none"
               >
                 {heroContent.cta}
-              </Button>
+              </GradientButton>
             </div>
           </div>
 

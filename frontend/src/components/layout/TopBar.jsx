@@ -41,17 +41,21 @@ export function TopBar() {
   const isApplicationsActive =
     normalizedPath.startsWith("/applications") &&
     normalizedPath !== "/applications/new";
+  const isResumesActive = normalizedPath.startsWith("/resumes");
 
   const activeNav = isDashboardActive
     ? "dashboard"
     : isApplicationsActive
     ? "applications"
+    : isResumesActive
+    ? "resumes"
     : null;
 
   // Refs for sliding indicator
   const navRef = useRef(null);
   const dashboardRef = useRef(null);
   const applicationsRef = useRef(null);
+  const resumesRef = useRef(null);
 
   // Indicator measurement state
   const [indicatorStyle, setIndicatorStyle] = useState({
@@ -92,6 +96,8 @@ export function TopBar() {
       targetEl = dashboardRef.current;
     } else if (activeNav === "applications") {
       targetEl = applicationsRef.current;
+    } else if (activeNav === "resumes") {
+      targetEl = resumesRef.current;
     }
 
     if (targetEl && navRef.current) {
@@ -153,6 +159,10 @@ export function TopBar() {
 
   const prefetchApplications = () => {
     import("../../pages/Applications.jsx");
+  };
+
+  const prefetchResumes = () => {
+    import("../../pages/Resumes.jsx");
   };
 
   const prefetchNewApplication = () => {
@@ -241,6 +251,32 @@ export function TopBar() {
                   )}
                 >
                   Applications
+                </span>
+              </span>
+            </NavLink>
+
+            <NavLink
+              ref={resumesRef}
+              to="/resumes"
+              aria-current={isResumesActive ? "page" : undefined}
+              onMouseEnter={prefetchResumes}
+              onFocus={prefetchResumes}
+              className="relative flex items-center px-3 py-2 text-[15px] leading-none select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 rounded-[6px]"
+            >
+              <span className="grid place-items-center">
+                {/* Invisible font-semibold copy reserves width, preventing layout shift on weight change */}
+                <span className="invisible font-semibold block" aria-hidden="true">
+                  Resumes
+                </span>
+                <span
+                  className={cn(
+                    "col-start-1 row-start-1 block transition-colors duration-150",
+                    isResumesActive
+                      ? "font-semibold text-ink"
+                      : "font-medium text-ink-soft hover:text-ink"
+                  )}
+                >
+                  Resumes
                 </span>
               </span>
             </NavLink>

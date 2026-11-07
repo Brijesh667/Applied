@@ -1,9 +1,38 @@
 import rateLimit from "express-rate-limit";
+import {
+  RESUME_REPARSE_LIMIT_PER_HOUR,
+  JOB_SEARCH_LIMIT_PER_HOUR,
+} from "../config/constants.js";
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { message: "Too many attempts, try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const resumeUploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: { message: "Too many uploads, try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const resumeReparseLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: RESUME_REPARSE_LIMIT_PER_HOUR,
+  message: { message: "Too many reparse attempts, try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const jobSearchLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: JOB_SEARCH_LIMIT_PER_HOUR,
+  keyGenerator: (req) => String(req.session?.userId || "anonymous"),
+  message: { message: "Too many job search requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -22,4 +51,10 @@ export const apiLimiter = rateLimit({
     ),
 });
 
-export default { authLimiter, apiLimiter };
+export default {
+  authLimiter,
+  resumeUploadLimiter,
+  resumeReparseLimiter,
+  jobSearchLimiter,
+  apiLimiter,
+};

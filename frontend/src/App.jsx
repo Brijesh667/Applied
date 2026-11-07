@@ -23,6 +23,7 @@ const Applications = lazy(() => import("./pages/Applications.jsx"));
 const ApplicationForm = lazy(() => import("./pages/ApplicationForm.jsx"));
 const ApplicationDetail = lazy(() => import("./pages/ApplicationDetail.jsx"));
 const ApplicationReplies = lazy(() => import("./pages/ApplicationReplies.jsx"));
+const Resumes = lazy(() => import("./pages/Resumes.jsx"));
 const NotFound = lazy(() => import("./pages/NotFound.jsx"));
 const Styleguide = import.meta.env.DEV
   ? lazy(() => import("./pages/Styleguide.jsx"))
@@ -70,6 +71,14 @@ export function App() {
                   element={
                     <ErrorBoundary>
                       <Applications />
+                    </ErrorBoundary>
+                  }
+                />
+                <Route
+                  path="/resumes"
+                  element={
+                    <ErrorBoundary>
+                      <Resumes />
                     </ErrorBoundary>
                   }
                 />

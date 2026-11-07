@@ -10,6 +10,27 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Multer limit file size
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({
+      message: "File is too large. Maximum size is 5 MB.",
+    });
+  }
+
+  // Other Multer errors
+  if (err.name === "MulterError") {
+    return res.status(400).json({
+      message: err.message || "Invalid file upload",
+    });
+  }
+
+  // File type errors from upload filter
+  if (err.name === "InvalidFileTypeError") {
+    return res.status(400).json({
+      message: err.message,
+    });
+  }
+
   // Payload too large
   if (err.type === "entity.too.large" || err.status === 413) {
     return res.status(413).json({

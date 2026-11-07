@@ -164,6 +164,11 @@ const applicationSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    resumeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Resume",
+      default: null,
+    },
     replies: [replySchema],
   },
   {

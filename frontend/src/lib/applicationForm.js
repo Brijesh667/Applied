@@ -46,6 +46,7 @@ export function emptyValues() {
     notes: "",
     jobLink: "",
     appliedDate: getLocalTodayString(),
+    resumeId: "",
   };
 }
 
@@ -96,6 +97,7 @@ export function toFormValues(application) {
     notes: application.notes || "",
     jobLink: application.jobLink || "",
     appliedDate,
+    resumeId: application.resumeId || "",
   };
 }
 
@@ -242,6 +244,7 @@ export function toPayload(values) {
     notes: normalizeText(values.notes),
     jobLink: (values.jobLink || "").trim(),
     appliedDate: new Date(values.appliedDate + "T12:00:00").toISOString(),
+    resumeId: values.resumeId ? values.resumeId : null,
   };
 }
 
@@ -315,6 +318,12 @@ export function toPatch(values, initialValues) {
 
   if (values.appliedDate !== initialValues.appliedDate) {
     patch.appliedDate = new Date(values.appliedDate + "T12:00:00").toISOString();
+  }
+
+  const curResumeId = values.resumeId || "";
+  const initResumeId = initialValues.resumeId || "";
+  if (curResumeId !== initResumeId) {
+    patch.resumeId = curResumeId ? curResumeId : null;
   }
 
   return patch;

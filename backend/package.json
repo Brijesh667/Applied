@@ -5,11 +5,17 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
+    "lint": "node --check src/server.js src/config/env.js src/config/constants.js src/services/resumeAi.js src/services/jobs/queryBuilder.js src/services/jobs/adzuna.js src/services/jobs/jsearch.js src/services/jobs/normalize.js src/services/jobs/dedupe.js src/models/JobSearchCache.js src/controllers/job.controller.js src/validators/job.validators.js src/routes/job.routes.js scripts/jobs-selftest.js",
     "start": "node src/server.js",
-    "seed": "node scripts/seed.js"
+    "jobs:test": "node scripts/jobs-selftest.js",
+    "seed": "node scripts/seed.js",
+    "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "@google/genai": "^3.0.0",
     "bcrypt": "^6.0.0",
+    "cloudinary": "^2.11.0",
     "connect-mongo": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
@@ -17,8 +23,11 @@
     "express-rate-limit": "^8.7.2",
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
+    "mammoth": "^1.13.0",
     "mongoose": "^9.11.4",
     "morgan": "^1.12.1",
+    "multer": "^2.5.0",
+    "pdf-parse": "^1.1.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

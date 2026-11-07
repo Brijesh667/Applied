@@ -16,7 +16,7 @@
  */
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Plus, Briefcase } from "lucide-react";
+import { LayoutDashboard, Plus, Briefcase, FileText } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import { useInteractiveButton } from "../../hooks/useInteractiveButton.js";
 
@@ -60,6 +60,7 @@ export function BottomNav() {
   const isAddActive = pathname === "/applications/new";
   const isApplicationsActive =
     pathname.startsWith("/applications") && pathname !== "/applications/new";
+  const isResumesActive = pathname.startsWith("/resumes");
 
   const prefetchDashboard = () => {
     import("../../pages/Dashboard.jsx");
@@ -71,6 +72,10 @@ export function BottomNav() {
 
   const prefetchApplications = () => {
     import("../../pages/Applications.jsx");
+  };
+
+  const prefetchResumes = () => {
+    import("../../pages/Resumes.jsx");
   };
 
   return (
@@ -101,6 +106,14 @@ export function BottomNav() {
           icon={Briefcase}
           label="Applications"
           prefetch={prefetchApplications}
+        />
+
+        <BottomNavItem
+          to="/resumes"
+          isActive={isResumesActive}
+          icon={FileText}
+          label="Resumes"
+          prefetch={prefetchResumes}
         />
       </div>
     </nav>

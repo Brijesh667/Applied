@@ -6,6 +6,12 @@ export const queryKeys = {
     list: (params = {}) => ["applications", "list", params],
     detail: (id) => ["applications", "detail", id],
   },
+  resumes: {
+    all: ["resumes"],
+    lists: () => ["resumes", "list"],
+    list: () => ["resumes", "list"],
+    detail: (id) => ["resumes", "detail", id],
+  },
   stats: ["stats"],
 };
 

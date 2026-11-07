@@ -47,6 +47,18 @@
   --dur-ripple: 520ms;
   --duration-micro: 120ms;
   --duration-state: 200ms;
+
+  /* Gradient button animation */
+  --animate-gradient-x: gradient-x 8s linear infinite;
+}
+
+@keyframes gradient-x {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 html {

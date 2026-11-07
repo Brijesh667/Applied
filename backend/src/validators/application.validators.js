@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { z } from "zod";
 import { LIMITS, PAY_TYPES, STATUSES } from "../config/constants.js";
 import { normalizeText } from "../utils/normalize.js";
@@ -107,6 +108,14 @@ export const createApplicationSchema = z
       })
       .optional()
       .default(""),
+    resumeId: z
+      .string()
+      .refine((val) => mongoose.isValidObjectId(val), {
+        message: "Invalid resume id",
+      })
+      .nullable()
+      .optional()
+      .default(null),
     appliedDate: z.coerce
       .date({ invalid_type_error: "Invalid applied date" })
       .refine(
@@ -252,6 +261,13 @@ export const updateApplicationSchema = z
       .refine((val) => !val || /^https?:\/\//i.test(val), {
         message: "Job link must start with http:// or https://",
       })
+      .optional(),
+    resumeId: z
+      .string()
+      .refine((val) => mongoose.isValidObjectId(val), {
+        message: "Invalid resume id",
+      })
+      .nullable()
       .optional(),
     appliedDate: z.coerce
       .date({ invalid_type_error: "Invalid applied date" })
