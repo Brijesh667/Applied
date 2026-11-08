@@ -14,6 +14,8 @@ export function formatDate(iso) {
 
 export function formatPay(pay) {
   if (!pay || typeof pay.amount !== "number") return "";
+  // Applications tracked from job listings without compensation default to pay.amount = 0 ("Not specified")
+  if (pay.amount === 0) return "Not specified";
   const formatted = new Intl.NumberFormat("en-IN").format(pay.amount);
   const label = PAY_LABELS[pay.type] || pay.type || "";
   return `${CURRENCY}${formatted} ${label}`.trim();

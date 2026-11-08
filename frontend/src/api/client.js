@@ -1,9 +1,11 @@
 export class ApiError extends Error {
-  constructor(status, message, fieldErrors = null) {
+  constructor(status, message, fieldErrors = null, data = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.data = data;
+    this.applicationId = data?.applicationId;
   }
 }
 
@@ -95,7 +97,7 @@ async function request(path, options = {}) {
       unauthorizedHandler();
     }
 
-    throw new ApiError(status, message, fieldErrors);
+    throw new ApiError(status, message, fieldErrors, data);
   }
 
   return data;

@@ -2,6 +2,7 @@ import rateLimit from "express-rate-limit";
 import {
   RESUME_REPARSE_LIMIT_PER_HOUR,
   JOB_SEARCH_LIMIT_PER_HOUR,
+  JOB_TRACK_LIMIT_PER_HOUR,
 } from "../config/constants.js";
 
 export const authLimiter = rateLimit({
@@ -37,6 +38,15 @@ export const jobSearchLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+export const jobTrackLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: JOB_TRACK_LIMIT_PER_HOUR,
+  keyGenerator: (req) => String(req.session?.userId || "anonymous"),
+  message: { message: "Too many job track requests. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -56,5 +66,6 @@ export default {
   resumeUploadLimiter,
   resumeReparseLimiter,
   jobSearchLimiter,
+  jobTrackLimiter,
   apiLimiter,
 };

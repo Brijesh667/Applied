@@ -1,4 +1,5 @@
 import Resume from "../models/Resume.js";
+import Application from "../models/Application.js";
 import JobSearchCache, { computeProfileHash } from "../models/JobSearchCache.js";
 import config from "../config/env.js";
 import {
@@ -8,7 +9,9 @@ import { buildQueries, QueryBuilderError } from "../services/jobs/queryBuilder.j
 import { searchJobs as searchAdzuna } from "../services/jobs/adzuna.js";
 import { searchJobs as searchJSearch } from "../services/jobs/jsearch.js";
 import { normalizeJobs } from "../services/jobs/normalize.js";
-import { dedupeJobs } from "../services/jobs/dedupe.js";
+import { dedupeJobs, normalizeApplyUrlKey } from "../services/jobs/dedupe.js";
+import { rankAndMergeJobs } from "../services/jobs/jobRankService.js";
+import { jobToApplication } from "../services/jobs/jobToApplication.js";
 
 /**
  * Handle POST /api/jobs/search
@@ -54,6 +57,40 @@ export async function searchJobs(req, res, next) {
       profileHash,
     });
 
+    // Helper to query user's applications and map trackedApplicationId
+    async function getTrackedAppsMap() {
+      const userApps = await Application.find({
+        userId,
+        jobLink: { $exists: true, $ne: "" },
+      }).select("_id jobLink");
+
+      const map = new Map();
+      for (const app of userApps) {
+        if (app.jobLink) {
+          const key = normalizeApplyUrlKey(app.jobLink);
+          if (key && !map.has(key)) {
+            map.set(key, String(app._id));
+          }
+        }
+      }
+      return map;
+    }
+
+    function attachTrackedApplicationIds(jobs, map) {
+      if (!Array.isArray(jobs)) return [];
+      return jobs.map((job) => {
+        const jobObj =
+          typeof job.toObject === "function" ? job.toObject() : { ...job };
+        const key = normalizeApplyUrlKey(jobObj.applyUrl);
+        const trackedApplicationId =
+          key && map.has(key) ? map.get(key) : null;
+        return {
+          ...jobObj,
+          trackedApplicationId,
+        };
+      });
+    }
+
     if (existingCache) {
       const cacheTimestamp = new Date(
         existingCache.updatedAt || existingCache.createdAt
@@ -62,10 +99,13 @@ export async function searchJobs(req, res, next) {
 
       // Return cache if refresh not requested OR if younger than min refresh age
       if (!refresh || ageSeconds < JOB_SEARCH_REFRESH_MIN_AGE_SECONDS) {
+        const trackedMap = await getTrackedAppsMap();
         return res.status(200).json({
-          jobs: existingCache.jobs || [],
+          jobs: attachTrackedApplicationIds(existingCache.jobs || [], trackedMap),
           total: (existingCache.jobs || []).length,
           sources: existingCache.sources || {},
+          rankedBy: existingCache.rankedBy || "local",
+          rankStatus: existingCache.rankStatus || "skipped",
           cached: true,
           generatedAt: new Date(cacheTimestamp).toISOString(),
         });
@@ -115,10 +155,13 @@ export async function searchJobs(req, res, next) {
 
     if (allProvidersFailed) {
       if (existingCache) {
+        const trackedMap = await getTrackedAppsMap();
         return res.status(200).json({
-          jobs: existingCache.jobs || [],
+          jobs: attachTrackedApplicationIds(existingCache.jobs || [], trackedMap),
           total: (existingCache.jobs || []).length,
           sources: { ...(existingCache.sources || {}), ...sources },
+          rankedBy: existingCache.rankedBy || "local",
+          rankStatus: existingCache.rankStatus || "skipped",
           cached: true,
           generatedAt: new Date(
             existingCache.updatedAt || existingCache.createdAt
@@ -130,17 +173,23 @@ export async function searchJobs(req, res, next) {
       });
     }
 
-    // 7. Normalize, dedupe, and sort
+    // 7. Normalize, dedupe, and rank
     const allNormalized = [];
     for (const item of rawJobsToNormalize) {
       const normalized = normalizeJobs(item.jobs, item.name);
       allNormalized.push(...normalized);
     }
 
-    const finalJobs = dedupeJobs(allNormalized);
+    const dedupedJobs = dedupeJobs(allNormalized);
+    const {
+      jobs: rankedJobs,
+      rankedBy,
+      rankStatus,
+    } = await rankAndMergeJobs(dedupedJobs, resume);
+
     const now = new Date();
 
-    // 8. Upsert cache
+    // 8. Upsert cache (without trackedApplicationId so cache is never stale)
     await JobSearchCache.findOneAndUpdate(
       {
         userId,
@@ -149,8 +198,10 @@ export async function searchJobs(req, res, next) {
       },
       {
         $set: {
-          jobs: finalJobs,
+          jobs: rankedJobs,
           sources,
+          rankedBy,
+          rankStatus,
           updatedAt: now,
         },
         $setOnInsert: {
@@ -160,10 +211,13 @@ export async function searchJobs(req, res, next) {
       { upsert: true, returnDocument: "after" }
     );
 
+    const trackedMap = await getTrackedAppsMap();
     return res.status(200).json({
-      jobs: finalJobs,
-      total: finalJobs.length,
+      jobs: attachTrackedApplicationIds(rankedJobs, trackedMap),
+      total: rankedJobs.length,
       sources,
+      rankedBy,
+      rankStatus,
       cached: false,
       generatedAt: now.toISOString(),
     });
@@ -172,6 +226,73 @@ export async function searchJobs(req, res, next) {
   }
 }
 
+/**
+ * Handle POST /api/jobs/track
+ */
+export async function trackJob(req, res, next) {
+  try {
+    const { resumeId, jobId } = req.body;
+    const userId = req.session.userId;
+
+    // 1. Load user's resume (ownership validation)
+    const resume = await Resume.findOne({
+      _id: resumeId,
+      userId,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    // 2. Find the job from server cache
+    const cache = await JobSearchCache.findOne({
+      userId,
+      resumeId,
+      "jobs.id": jobId,
+    }).sort({ updatedAt: -1, createdAt: -1 });
+
+    const job = cache?.jobs?.find((j) => j.id === jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        message: "This job is no longer in your results. Search again.",
+      });
+    }
+
+    // 3. Duplicate check against existing applications with jobLink
+    const targetUrlKey = normalizeApplyUrlKey(job.applyUrl);
+    const existingApps = await Application.find({
+      userId,
+      jobLink: { $exists: true, $ne: "" },
+    }).select("_id jobLink");
+
+    const duplicateApp = existingApps.find(
+      (app) => normalizeApplyUrlKey(app.jobLink) === targetUrlKey
+    );
+
+    if (duplicateApp) {
+      return res.status(409).json({
+        message: "You already track this job",
+        applicationId: duplicateApp._id,
+      });
+    }
+
+    // 4. Map job to application and save
+    const appData = jobToApplication(job, resume);
+    const application = new Application({
+      ...appData,
+      userId,
+    });
+
+    await application.save();
+
+    return res.status(201).json({ application });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   searchJobs,
+  trackJob,
 };

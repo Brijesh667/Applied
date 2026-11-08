@@ -41,12 +41,15 @@ export function TopBar() {
   const isApplicationsActive =
     normalizedPath.startsWith("/applications") &&
     normalizedPath !== "/applications/new";
+  const isJobsActive = normalizedPath.startsWith("/jobs");
   const isResumesActive = normalizedPath.startsWith("/resumes");
 
   const activeNav = isDashboardActive
     ? "dashboard"
     : isApplicationsActive
     ? "applications"
+    : isJobsActive
+    ? "jobs"
     : isResumesActive
     ? "resumes"
     : null;
@@ -55,6 +58,7 @@ export function TopBar() {
   const navRef = useRef(null);
   const dashboardRef = useRef(null);
   const applicationsRef = useRef(null);
+  const jobsRef = useRef(null);
   const resumesRef = useRef(null);
 
   // Indicator measurement state
@@ -96,6 +100,8 @@ export function TopBar() {
       targetEl = dashboardRef.current;
     } else if (activeNav === "applications") {
       targetEl = applicationsRef.current;
+    } else if (activeNav === "jobs") {
+      targetEl = jobsRef.current;
     } else if (activeNav === "resumes") {
       targetEl = resumesRef.current;
     }
@@ -161,6 +167,10 @@ export function TopBar() {
     import("../../pages/Applications.jsx");
   };
 
+  const prefetchJobs = () => {
+    import("../../pages/Jobs.jsx");
+  };
+
   const prefetchResumes = () => {
     import("../../pages/Resumes.jsx");
   };
@@ -201,7 +211,7 @@ export function TopBar() {
           aria-label="Main"
           className="hidden md:flex items-center justify-center h-full relative"
         >
-          <div className="flex items-center gap-8 h-full">
+          <div className="flex items-center gap-6 lg:gap-8 h-full">
             <NavLink
               ref={dashboardRef}
               to="/dashboard"
@@ -251,6 +261,32 @@ export function TopBar() {
                   )}
                 >
                   Applications
+                </span>
+              </span>
+            </NavLink>
+
+            <NavLink
+              ref={jobsRef}
+              to="/jobs"
+              aria-current={isJobsActive ? "page" : undefined}
+              onMouseEnter={prefetchJobs}
+              onFocus={prefetchJobs}
+              className="relative flex items-center px-3 py-2 text-[15px] leading-none select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 rounded-[6px]"
+            >
+              <span className="grid place-items-center">
+                {/* Invisible font-semibold copy reserves width, preventing layout shift on weight change */}
+                <span className="invisible font-semibold block" aria-hidden="true">
+                  Jobs
+                </span>
+                <span
+                  className={cn(
+                    "col-start-1 row-start-1 block transition-colors duration-150",
+                    isJobsActive
+                      ? "font-semibold text-ink"
+                      : "font-medium text-ink-soft hover:text-ink"
+                  )}
+                >
+                  Jobs
                 </span>
               </span>
             </NavLink>

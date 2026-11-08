@@ -20,6 +20,7 @@ import { NetworkStatus } from "./components/layout/NetworkStatus.jsx";
 const Landing = lazy(() => import("./pages/Landing.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Applications = lazy(() => import("./pages/Applications.jsx"));
+const Jobs = lazy(() => import("./pages/Jobs.jsx"));
 const ApplicationForm = lazy(() => import("./pages/ApplicationForm.jsx"));
 const ApplicationDetail = lazy(() => import("./pages/ApplicationDetail.jsx"));
 const ApplicationReplies = lazy(() => import("./pages/ApplicationReplies.jsx"));
@@ -71,6 +72,14 @@ export function App() {
                   element={
                     <ErrorBoundary>
                       <Applications />
+                    </ErrorBoundary>
+                  }
+                />
+                <Route
+                  path="/jobs"
+                  element={
+                    <ErrorBoundary>
+                      <Jobs />
                     </ErrorBoundary>
                   }
                 />

@@ -41,6 +41,30 @@ SEED_EMAIL="you@example.com" SEED_PASSWORD="<your-password>" npm run seed
 ```
 *(Variables can also be set in `backend/.env` as `SEED_EMAIL` and `SEED_PASSWORD`)*
 
+### 5. Running Tests
+- **Job Search & Ranking Offline Tests**:
+  ```bash
+  npm run jobs:test
+  ```
+  Runs 26 offline unit & fixture tests for normalizers, dedupers, query builder, profile hashing, local scoring heuristics, and AI output normalization with no network or API keys required.
+- **End-to-End Smoke Tests**:
+  ```bash
+  npm run smoke
+  ```
+  To conserve daily AI provider quotas (e.g. Gemini free-tier daily cap), run with `SMOKE_SKIP_AI=1`:
+  ```bash
+  SMOKE_SKIP_AI=1 npm run smoke
+  ```
+  To conserve external job search provider calls (e.g. Adzuna free test quota of 25 calls or JSearch limits), run with `SMOKE_SKIP_JOBS=1`:
+  ```bash
+  SMOKE_SKIP_JOBS=1 npm run smoke
+  ```
+  Both flags can be combined when validating core CRUD, auth, and tracking functionality:
+  ```bash
+  SMOKE_SKIP_AI=1 SMOKE_SKIP_JOBS=1 npm run smoke
+  ```
+  When `SMOKE_SKIP_AI=1` is set, tests that make live AI calls are reported as `[SKIP] - SKIPPED: SMOKE_SKIP_AI`. When `SMOKE_SKIP_JOBS=1` is set, tests that trigger live external job searches are reported as `[SKIP] - SKIPPED: SMOKE_SKIP_JOBS=1`. All other suites execute completely.
+
 ---
 
 ## Environment Variables
@@ -208,10 +232,62 @@ Job search integrates with two external providers:
 > [!NOTE]
 > Applications (`/api/applications`) support an optional `resumeId` reference. On create/update, the referenced resume is verified to belong to the authenticated user. When a resume is deleted, referenced applications automatically have their `resumeId` cleared (`null`).
 
-### Jobs (`/api/jobs`) — Added in Phase 2 (Part 1)
+### Jobs (`/api/jobs`) — Phase 2
 | Method | Path | Auth Required | Description |
 | :--- | :--- | :---: | :--- |
-| `POST` | `/api/jobs/search` | **Yes** | Search jobs matching a user's resume. Body: `{ resumeId: string, refresh?: boolean }`. Queries Adzuna and JSearch, normalizes listings, deduplicates collisions, and caches results for 24 hours. Rate limited to 10 requests/hour per user. Returns `200 { jobs, total, sources, cached, generatedAt }`. |
+| `POST` | `/api/jobs/search` | **Yes** | Search and rank jobs matching a user's resume. Body: `{ resumeId: string, refresh?: boolean }`. Queries Adzuna and JSearch, normalizes listings, deduplicates collisions, scores candidates locally, evaluates top 25 candidates with a single batched AI call, and caches results for 24 hours. Rate limited to 10 requests/hour per user. Computes dynamic `trackedApplicationId` per job against user's applications. |
+| `POST` | `/api/jobs/track` | **Yes** | Track a job from search results into an Application document. Body: `{ resumeId: string, jobId: string }`. Fetches the job from the server's cache, checks for URL duplicates (returns `409 { message, applicationId }` if already tracked), maps fields, and creates a new application (`201 { application }`). Rate limited to 60 requests/hour per user. |
+
+#### Job Search & Ranking Pipeline:
+1. **Local Scoring (Deterministic Heuristic)**:
+   - **Skills (up to 50 pts)**: Proportion of candidate's top 15 skills matching whole words in job title + snippet (robust against punctuation: `Node.js`, `C++`, `C#`).
+   - **Role Overlap (up to 30 pts)**: Overlap of non-stop words between candidate role titles and job title (generic terms like "developer" only count when accompanied by specific role terms).
+   - **Level Fit (+15 to -20 pts)**: Freshers/interns receive bonuses for entry words and penalties for senior/lead requirements; experienced candidates penalize intern postings.
+   - **Location (up to 5 pts)**: Preference matches job location or remote indicators.
+   - Clamped to integer `0..100`, accompanied by a factual one-line `matchReason` ($\le 120$ chars).
+2. **Top Candidate Cut**:
+   - The top 25 jobs by local score (`JOB_RANK_CANDIDATES = 25`) are selected for AI evaluation.
+3. **Batched AI Ranking**:
+   - Exactly **one** AI call is dispatched for all 25 candidate jobs using structured output (Anthropic tool use or Google JSON schema).
+   - Only non-PII fields (`roleTitles`, `skills`, `experienceYears`, `locationPreference`, and for each job: `id`, `title`, `company`, `location`, `snippet` capped at 300 chars) are sent to the model.
+   - Zero automatic retries on quota or rate-limit errors; at most one retry on timeouts or 5xx.
+4. **Graceful Fallback**:
+   - If AI is unavailable, over quota, times out, or returns invalid output, the locally scored results are returned (`rankedBy: "local"`). Searches never fail due to ranking issues.
+5. **Response Fields**:
+   - Per job: `matchScore` (0..100 integer), `matchReason` (string $\le 120$ chars), `scoredBy` (`"ai"` or `"local"`).
+   - Top-level: `rankedBy` (`"ai"` or `"local"`), `rankStatus` (`"ok" | "unavailable" | "quota" | "timeout" | "invalid_output" | "failed" | "skipped"`), `sources`, `cached`, `generatedAt`.
+   - Cache: Results stored in `JobSearchCache`; cache hits return stored rankings with `cached: true` and never trigger AI calls.
+
+**Job Search Response Shape**:
+```json
+{
+  "jobs": [
+    {
+      "id": "adzuna-12345",
+      "source": "adzuna",
+      "platform": "Adzuna",
+      "title": "Full-Stack Developer",
+      "company": "Infosys",
+      "location": "Bengaluru, Karnataka",
+      "remote": false,
+      "snippet": "Looking for a full-stack engineer experienced in React and Node.js...",
+      "applyUrl": "https://www.adzuna.in/land/ad/12345",
+      "postedAt": "2026-11-05T12:00:00.000Z",
+      "pay": { "type": "yearly", "amount": 750000 },
+      "matchScore": 88,
+      "matchReason": "Strong match for React and Node.js with junior level fit",
+      "scoredBy": "ai"
+    }
+  ],
+  "total": 1,
+  "sources": { "adzuna": "ok", "jsearch": "skipped" },
+  "rankedBy": "ai",
+  "rankStatus": "ok",
+  "cached": false,
+  "generatedAt": "2026-11-07T05:40:00.000Z"
+}
+```
+
 
 
 **Stats Response Shape**:

@@ -80,9 +80,19 @@ export const resumesApi = {
   },
 };
 
+export const jobsApi = {
+  search: async ({ resumeId, refresh = false }) => {
+    return api.post("/jobs/search", { body: { resumeId, refresh } });
+  },
+  track: async ({ resumeId, jobId }) => {
+    return api.post("/jobs/track", { body: { resumeId, jobId } });
+  },
+};
+
 export default {
   auth: authApi,
   applications: applicationsApi,
   stats: statsApi,
   resumes: resumesApi,
+  jobs: jobsApi,
 };

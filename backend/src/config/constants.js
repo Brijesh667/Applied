@@ -55,4 +55,13 @@ export const JOB_MAX_RESULTS_RETURNED = 50;
 export const JOB_MAX_AGE_DAYS = 60;
 export const JOB_DESCRIPTION_SNIPPET_MAX = 500;
 
+export const JOB_RANK_CANDIDATES = 25;
+export const JOB_RANK_SNIPPET_CHARS = 300;
+export const JOB_RANK_REASON_MAX = 120;
+export const JOB_RANK_TIMEOUT_MS = 30000;
+export const JOB_RANK_MAX_TOKENS = 3000;
+
+export const TRACK_DEFAULT_DURATION = "Not set";
+export const JOB_TRACK_LIMIT_PER_HOUR = 60;
+
 

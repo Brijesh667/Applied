@@ -75,12 +75,14 @@ Indexes:
 - `{ userId: 1, createdAt: -1 }`
 - `{ userId: 1 }` with `partialFilterExpression: { isDefault: true }` and `unique: true` (strictly prevents multiple default resumes per user).
 
-### JobSearchCache (`backend/src/models/JobSearchCache.js`) — Added in Phase 2 (Part 1)
+### JobSearchCache (`backend/src/models/JobSearchCache.js`) — Added in Phase 2 (Parts 1 & 2)
 - `userId`: ObjectId ref User, required, indexed.
 - `resumeId`: ObjectId ref Resume, required.
 - `profileHash`: String, sha1 of sorted roles, skills, experienceYears, locationPreference.
-- `jobs`: Array of normalized job objects.
+- `jobs`: Array of normalized and ranked job objects (with `matchScore`, `matchReason`, `scoredBy`).
 - `sources`: Object with status per provider (`ok`, `failed`, `quota`, `skipped`).
+- `rankedBy`: String, enum `['ai', 'local']`, default `'local'`.
+- `rankStatus`: String, enum `['ok', 'unavailable', 'quota', 'timeout', 'invalid_output', 'failed', 'skipped']`.
 - Timestamps: `createdAt`, `updatedAt`.
 - TTL Index: `{ createdAt: 1 }` with `expireAfterSeconds: 86400`.
 - Unique Index: `{ userId: 1, resumeId: 1, profileHash: 1 }`.
@@ -117,8 +119,25 @@ Indexes:
 - `PATCH /api/resumes/:id`: Rename (`label`), promote to default (`isDefault: true`), or manually edit profile fields (`skills`, `roleTitles`, `experienceYears`, `locationPreference`). Editing profile fields flags `skillsEditedByUser: true`. Returns `200 { resume }`.
 - `DELETE /api/resumes/:id`: Deletes document from DB, promotes next newest resume if default was deleted, nullifies `resumeId` across user's applications, and deletes authenticated asset from Cloudinary. Returns `200 { message }`.
 
-### Jobs (`/api/jobs`) — Added in Phase 2 (Part 1)
-- `POST /api/jobs/search`: Search jobs matching resume criteria. Rate limited to 10/hr per user. Returns `200 { jobs, total, sources, cached, generatedAt }`. Returns `503` if no provider is configured. If all providers fail, falls back to older cache or returns `502`.
+### Jobs (`/api/jobs`) — Added in Phase 2
+- `POST /api/jobs/search`: Search and rank jobs matching resume criteria. Rate limited to 10/hr per user. Returns `200 { jobs, total, sources, rankedBy, rankStatus, cached, generatedAt }`. Evaluates top 25 candidate jobs locally and via a single batched AI call with graceful fallback to local scoring. Returns `503` if no provider is configured. If all providers fail, falls back to older cache or returns `502`. Adds dynamic `trackedApplicationId` to every returned job by checking against the user's existing applications.
+- `POST /api/jobs/track`: Track a job from search results into an Application document. Body: `{ resumeId, jobId }`. Fetches the job from the server's cache, checks for URL duplicates (returns `409 { message: "You already track this job", applicationId }` if duplicate found), maps fields, and creates a new application (`201 { application }`). Rate limited to 60 requests/hour per user.
+
+#### Job to Application Mapping (`services/jobs/jobToApplication.js`):
+| Application field | Value |
+|---|---|
+| `companyName` | job company, cut to 50 |
+| `role` | job title, cut to 50 |
+| `appliedFrom` | job platform (cut to 30); fallback `"Other"` |
+| `pay` | `job.pay` if present; otherwise `{ type: "yearly", amount: 0 }` ("Not specified") |
+| `duration` | `"Not set"` (`TRACK_DEFAULT_DURATION`) |
+| `skills` | resume skills that appear as whole words in job title and snippet, joined as `A, B, C`, cut at a comma boundary to $\le 150$ chars; empty string if none |
+| `description` | job snippet, plain text, cut to 300 |
+| `notes` | `Added from job search. Match <score>%: <matchReason>`, cut to 200 |
+| `jobLink` | job `applyUrl` (max 500) |
+| `appliedDate` | now |
+| `resumeId` | the resume used for search |
+| `status` | default (`"applied"`) |
 
 ---
 
@@ -150,6 +169,13 @@ Indexes:
 - `JOB_MAX_RESULTS_RETURNED = 50`
 - `JOB_MAX_AGE_DAYS = 60`
 - `JOB_DESCRIPTION_SNIPPET_MAX = 500`
+- `JOB_RANK_CANDIDATES = 25`
+- `JOB_RANK_SNIPPET_CHARS = 300`
+- `JOB_RANK_REASON_MAX = 120`
+- `JOB_RANK_TIMEOUT_MS = 30000`
+- `JOB_RANK_MAX_TOKENS = 3000`
+- `TRACK_DEFAULT_DURATION = "Not set"`
+- `JOB_TRACK_LIMIT_PER_HOUR = 60`
 
 ---
 
@@ -245,3 +271,34 @@ Indexes:
   - MongoDB `JobSearchCache` model with 24-hour TTL index, profile-hash invalidation, and 1-hour refresh cooldown.
   - Offline self-test suite (`npm run jobs:test`) covering normalization, deduplication, and query generation.
   - Full smoke test suite (`npm run smoke`) passing with 61 tests.
+- **Phase 2, Part 2: Job Ranking (Local Score + One Batched AI Call)**: **COMPLETED**
+  - Deterministic local scoring engine (`scoreJobLocally` in `services/jobs/localScore.js`) balancing skill matches (up to 50 pts, handles `Node.js`, `C++`, `C#`), role title overlap (up to 30 pts), level and seniority fit (+15 to -20 pts), and location preference (up to 5 pts) into clamped integer `0..100` with factual reason strings ($\le 120$ chars).
+  - Top 25 candidate job selection (`JOB_RANK_CANDIDATES = 25`) evaluated via a single batched AI call (`rankJobsWithAi` in `services/jobs/jobRankAi.js`) with forced structured output (Anthropic tool use or Google Gemini JSON response schema).
+  - Shared AI client factory (`services/ai/clients.js`) with zero automatic retries on quota or rate-limit errors and single retry on timeouts/5xx.
+  - Resilient ranking pipeline (`rankAndMergeJobs` in `services/jobs/jobRankService.js`) with graceful fallback to local scoring on missing keys, quota exhaustion, network timeouts, or invalid schema without 5xx errors.
+  - Extended `JobSearchCache` model storing `matchScore`, `matchReason`, `scoredBy`, `rankedBy`, and `rankStatus`.
+  - Smoke suite AI quota guard (`SMOKE_SKIP_AI=1`) skipping real AI API calls while maintaining test coverage across all features.
+  - Comprehensive offline unit test suite (`npm run jobs:test`) passing all 26 tests (local scoring, special character matching, AI output sanitization, injection resistance, and merge stubs).
+- **Phase 2, Part 3: Jobs Page (Frontend Only)**: **COMPLETED**
+  - Dedicated `/jobs` page with URL parameter preservation (`?resume=<id>`), resume `<select>` pre-selecting default resume, search trigger button with loading state, and screen reader announcements.
+  - Pre-condition states for empty resumes (EmptyState linking to `/resumes`), pending AI extraction (disabled button + inline alert), and empty skills/roles (disabled button + link to `/resumes`).
+  - Search data layer using `useJobSearch(resumeId)` hook pairing `useMutation` with disabled `useQuery` (`staleTime: Infinity`) to retain search results per resume across session navigation with zero auto-search on mount and no polling.
+  - Results header with count, relative updated time, "Search again" button (`refresh: true`), 1-hour cooldown note (`JOB_REFRESH_COOLDOWN_MS = 3600000`), client-side sort toggle ("Best match" by `matchScore` vs "Newest" by `postedAt`), and quiet note when `rankedBy === "local"`.
+  - Responsive 2-column desktop / 1-column mobile grid of `JobCard` components featuring flat card surface (`surface` bg, 1px `rule` border, radius 12px), title clamped to 2 lines, company, location, remote chip, platform badge, Indian Rupee pay formatting (`en-IN`), calendar-day posted dates ("Today", "Yesterday", "N days ago"), snippet clamp (`JOB_SNIPPET_COLLAPSED_LINES = 3`) with "Show more" / "Show less" toggle, and match meter.
+  - Match meter design: Score percentage (`tabular-nums`), thin ink bar (`bg-ink`, no yellow highlighter), text tier with icon (`Sparkles` + "Strong match" $\ge 75$, `CheckCircle2` + "Good match" $\ge 50$, `MinusCircle` + "Weak match" $< 50$), and single-line `matchReason`.
+  - Isolated `ApplyButton` opening external postings in a new tab (`target="_blank" rel="noopener noreferrer"`) with protocol validation (`http://` or `https://` only, otherwise hidden).
+  - Navigation updates: desktop `TopBar` nav item after Applications with sliding 2px indicator measurement and prefetch, mobile `BottomNav` 5th tab (44px touch targets), and `UserMenu` link.
+  - Dev-only `Styleguide` section with 8 fixtures (strong match, good match remote, weak match, remote pay range, no pay/date, long snippet, invalid apply URL, skeleton, error states, empty state).
+  - Lint check: **PASSED (0 errors, 0 warnings)**.
+  - Build check: **PASSED (dist built cleanly in 14.12s, 0 errors)**.
+- **Phase 2, Part 4: Apply & Automatic Application Tracking (Backend + Frontend)**: **COMPLETED (Phase 2 Fully Completed)**
+  - Backend tracking endpoint `POST /api/jobs/track` behind `isAuthenticated` with rate limit of 60 req/hr (`jobTrackLimiter`). Reads job from `JobSearchCache`, enforces resume ownership, checks for duplicate applications via normalized `applyUrl` vs existing `jobLink` (returns `409 { message, applicationId }` if already tracked), maps fields via pure `jobToApplication`, and returns `201 { application }`.
+  - Search responses (`POST /api/jobs/search`) dynamically compute `trackedApplicationId` against the user's existing applications without mutating or staling the search cache.
+  - Pure mapping function `jobToApplication` (`services/jobs/jobToApplication.js`) truncating company (50), title (50), platform (30), defaulting missing/zero pay to `{ type: "yearly", amount: 0 }`, matching resume skills as whole words formatted as comma-separated string $\le 150$ chars cut at comma boundaries, snippet description cut to 300, formatted notes cut to 200, duration default "Not set", and status "applied".
+  - Frontend `useTrackJob` hook handling `201` and `409` consistently by updating the cached search results for the resume and invalidating application lists and stats without retries.
+  - Apply and return detection via `usePendingApply` and `sessionStorage`, triggering `DidYouApplyDialog` after returning to the tab ($\ge 3$ seconds old) without duplicate prompts.
+  - `JobCard` incorporates an always-visible "Track application" secondary button, a "Tracked" status label with checkmark and "View application" link when tracked, and keeps the external Apply link available.
+  - Compensation formatter `formatPay` displays "Not specified" when `pay.amount === 0` across cards, details panels, and lists.
+  - Extended offline unit test suite (`npm run jobs:test`) passing 32 tests covering mapping, truncation, pay defaults, comma-boundary skills formatting, injection resistance, and URL deduplication.
+  - Smoke tests extended with `SMOKE_SKIP_JOBS=1` flag and Suite 21 for job tracking.
+  - Both frontend and backend lint and production build checks clean.

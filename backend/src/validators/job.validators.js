@@ -13,6 +13,18 @@ export const jobSearchSchema = z
   })
   .strict();
 
+export const jobTrackSchema = z
+  .object({
+    resumeId: z
+      .string()
+      .trim()
+      .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+        message: "Invalid resume ID",
+      }),
+    jobId: z.string().trim().min(1, "Job ID is required"),
+  })
+  .strip();
+
 export function validateJobSearch(req, res, next) {
   const result = jobSearchSchema.safeParse(req.body);
   if (!result.success) {
@@ -30,7 +42,26 @@ export function validateJobSearch(req, res, next) {
   next();
 }
 
+export function validateJobTrack(req, res, next) {
+  const result = jobTrackSchema.safeParse(req.body);
+  if (!result.success) {
+    const formattedErrors = {};
+    for (const issue of result.error.issues) {
+      const field = issue.path.join(".") || "body";
+      formattedErrors[field] = issue.message;
+    }
+    return res.status(400).json({
+      message: "Validation failed",
+      errors: formattedErrors,
+    });
+  }
+  req.body = result.data;
+  next();
+}
+
 export default {
   jobSearchSchema,
+  jobTrackSchema,
   validateJobSearch,
+  validateJobTrack,
 };

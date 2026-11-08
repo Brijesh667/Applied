@@ -60,6 +60,14 @@ const jobSchema = new mongoose.Schema(
     },
     payMin: { type: Number, default: null },
     payMax: { type: Number, default: null },
+    matchScore: { type: Number, required: true },
+    matchReason: { type: String, required: true },
+    scoredBy: {
+      type: String,
+      enum: ["ai", "local"],
+      required: true,
+      default: "local",
+    },
   },
   { _id: false }
 );
@@ -85,6 +93,24 @@ const jobSearchCacheSchema = new mongoose.Schema(
     sources: {
       type: mongoose.Schema.Types.Mixed,
       default: {},
+    },
+    rankedBy: {
+      type: String,
+      enum: ["ai", "local"],
+      default: "local",
+    },
+    rankStatus: {
+      type: String,
+      enum: [
+        "ok",
+        "unavailable",
+        "quota",
+        "timeout",
+        "invalid_output",
+        "failed",
+        "skipped",
+      ],
+      default: "skipped",
     },
   },
   { timestamps: true }

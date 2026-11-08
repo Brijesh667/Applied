@@ -72,3 +72,8 @@ export const PAY_LABELS = {
 };
 
 export const CURRENCY = "₹";
+
+export const JOB_STRONG_MATCH_MIN = 75;
+export const JOB_GOOD_MATCH_MIN = 50;
+export const JOB_REFRESH_COOLDOWN_MS = 3600000;
+export const JOB_SNIPPET_COLLAPSED_LINES = 3;

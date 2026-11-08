@@ -12,6 +12,10 @@ export const queryKeys = {
     list: () => ["resumes", "list"],
     detail: (id) => ["resumes", "detail", id],
   },
+  jobs: {
+    all: ["jobs"],
+    search: (resumeId) => ["jobs", "search", resumeId],
+  },
   stats: ["stats"],
 };
 
