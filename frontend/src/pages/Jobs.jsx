@@ -422,6 +422,7 @@ export default function Jobs() {
                       key={job.id}
                       job={job}
                       resumeId={activeResumeId}
+                      resumeSkills={selectedResume?.skills}
                       onOpenTrackDialog={(targetJob) => setDialogJob(targetJob)}
                     />
                   ))}
