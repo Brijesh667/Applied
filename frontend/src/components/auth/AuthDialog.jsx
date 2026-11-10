@@ -18,7 +18,7 @@ import { RegisterForm } from "./RegisterForm.jsx";
 import { cn } from "../../lib/cn.js";
 
 export function AuthDialog() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -30,6 +30,7 @@ export function AuthDialog() {
 
   const dialogRef = useRef(null);
   const openerRef = useRef(null);
+  const inertSiblingsRef = useRef([]);
 
   useEffect(() => {
     if (location.state?.email) {
@@ -38,16 +39,32 @@ export function AuthDialog() {
   }, [location.state?.email]);
 
   const cleanupScrollLock = useCallback(() => {
-    document.body.style.paddingRight = "";
-    document.body.style.overflow = "";
-    const dialog = dialogRef.current;
-    if (dialog?.parentElement) {
-      Array.from(dialog.parentElement.children).forEach((el) => {
-        if (el !== dialog) {
-          el.removeAttribute("inert");
-        }
-      });
-    }
+    try {
+      document.body.style.paddingRight = "";
+      document.body.style.overflow = "";
+
+      // Remove inert from all tracked elements
+      if (inertSiblingsRef.current && inertSiblingsRef.current.length > 0) {
+        inertSiblingsRef.current.forEach((el) => {
+          try {
+            el.removeAttribute("inert");
+          } catch {}
+        });
+        inertSiblingsRef.current = [];
+      }
+
+      // Safety fallback: ensure dialog siblings and body elements are not inert
+      const dialog = dialogRef.current;
+      if (dialog?.parentElement) {
+        Array.from(dialog.parentElement.children).forEach((el) => {
+          if (el !== dialog) {
+            try {
+              el.removeAttribute("inert");
+            } catch {}
+          }
+        });
+      }
+    } catch {}
   }, []);
 
   const applyScrollLock = useCallback(() => {
@@ -63,13 +80,44 @@ export function AuthDialog() {
 
     // Mark background siblings inert so page behind is non-interactive
     if (dialog.parentElement) {
-      Array.from(dialog.parentElement.children).forEach((el) => {
-        if (el !== dialog) {
+      const siblingsToInert = Array.from(dialog.parentElement.children).filter(
+        (el) => el !== dialog && !el.hasAttribute("inert")
+      );
+      siblingsToInert.forEach((el) => {
+        try {
           el.setAttribute("inert", "");
-        }
+        } catch {}
       });
+      inertSiblingsRef.current = siblingsToInert;
     }
   }, []);
+
+  const handleClose = useCallback(() => {
+    if (isSubmitting) return;
+
+    const dialog = dialogRef.current;
+    if (dialog?.open) {
+      try {
+        dialog.close();
+      } catch {}
+    }
+    cleanupScrollLock();
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("auth");
+        return next;
+      },
+      { replace: true, state: location.state }
+    );
+
+    if (openerRef.current && typeof openerRef.current.focus === "function") {
+      try {
+        openerRef.current.focus();
+      } catch {}
+    }
+  }, [isSubmitting, setSearchParams, location.state, cleanupScrollLock]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -79,15 +127,23 @@ export function AuthDialog() {
       if (!dialog.open) {
         openerRef.current = document.activeElement;
         applyScrollLock();
-        dialog.showModal();
+        try {
+          dialog.showModal();
+        } catch (err) {
+          console.error("Failed to open dialog:", err);
+        }
       }
     } else {
       if (dialog.open) {
-        dialog.close();
+        try {
+          dialog.close();
+        } catch {}
       }
       cleanupScrollLock();
       if (openerRef.current && typeof openerRef.current.focus === "function") {
-        openerRef.current.focus();
+        try {
+          openerRef.current.focus();
+        } catch {}
       }
     }
 
@@ -95,31 +151,6 @@ export function AuthDialog() {
       cleanupScrollLock();
     };
   }, [isOpen, applyScrollLock, cleanupScrollLock]);
-
-  const handleClose = () => {
-    if (isSubmitting) return;
-
-    const dialog = dialogRef.current;
-    if (dialog?.open) {
-      dialog.close();
-    }
-    cleanupScrollLock();
-
-    // Always use URL-based navigation to remove the ?auth= param.
-    // Previously used navigate(-1) for authOpenedInApp, but that can close
-    // the browser tab if there is no previous history entry (e.g. fresh tab).
-    const newParams = new URLSearchParams(searchParams);
-    newParams.delete("auth");
-    const search = newParams.toString();
-    navigate(`${location.pathname}${search ? `?${search}` : ""}`, {
-      replace: true,
-      state: location.state,
-    });
-
-    if (openerRef.current && typeof openerRef.current.focus === "function") {
-      openerRef.current.focus();
-    }
-  };
 
   const handleCancel = (e) => {
     e.preventDefault();
@@ -158,13 +189,18 @@ export function AuthDialog() {
 
   const handleBackdropClick = (e) => {
     if (isSubmitting || !dialogRef.current) return;
+    // Clicks on child elements inside dialog must never close the dialog
+    if (e.target !== dialogRef.current) return;
+
     const rect = dialogRef.current.getBoundingClientRect();
-    const isInDialog =
-      rect.top <= e.clientY &&
-      e.clientY <= rect.top + rect.height &&
-      rect.left <= e.clientX &&
-      e.clientX <= rect.left + rect.width;
-    if (!isInDialog) {
+    const isOutside =
+      e.clientX < rect.left ||
+      e.clientX > rect.right ||
+      e.clientY < rect.top ||
+      e.clientY > rect.bottom;
+
+    // Must be an actual pointer click outside bounds, not keyboard activation (0, 0)
+    if (isOutside && (e.clientX !== 0 || e.clientY !== 0)) {
       handleClose();
     }
   };
@@ -173,26 +209,34 @@ export function AuthDialog() {
     if (email) {
       setPrefilledEmail(email);
     }
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set("auth", mode);
-    navigate(`?${newParams.toString()}`, {
-      replace: true,
-      state: { ...location.state, email: email || prefilledEmail },
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("auth", mode);
+        return next;
+      },
+      {
+        replace: true,
+        state: { ...location.state, email: email || prefilledEmail },
+      }
+    );
   };
 
-  const handleSuccess = () => {
+  const handleSuccess = useCallback(() => {
     const dialog = dialogRef.current;
     if (dialog?.open) {
-      dialog.close();
+      try {
+        dialog.close();
+      } catch {}
     }
     cleanupScrollLock();
 
-    const dest = location.state?.from?.pathname || "/dashboard";
+    const from = location.state?.from;
+    const dest = from
+      ? `${from.pathname || "/dashboard"}${from.search || ""}${from.hash || ""}`
+      : "/dashboard";
     navigate(dest, { replace: true });
-  };
-
-  if (!isOpen) return null;
+  }, [location.state, navigate, cleanupScrollLock]);
 
   return (
     <dialog
@@ -210,52 +254,54 @@ export function AuthDialog() {
         "overflow-visible select-none outline-none focus:outline-none"
       )}
     >
-      <div className="flex flex-col max-h-[calc(100dvh-64px)] overflow-y-auto">
-        {/* Top Header Row: Logo & Close */}
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <Logo size="sm" />
-          <button
-            type="button"
-            aria-label="Close dialog"
-            onClick={handleClose}
-            disabled={isSubmitting}
-            className="text-[13px] font-medium text-ink-soft hover:text-ink px-2.5 py-1 rounded-[6px] hover:bg-sunken transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-primary cursor-pointer disabled:opacity-50"
-          >
-            Close
-          </button>
-        </div>
+      {isOpen && (
+        <div className="flex flex-col max-h-[calc(100dvh-64px)] overflow-y-auto">
+          {/* Top Header Row: Logo & Close */}
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <Logo size="sm" />
+            <button
+              type="button"
+              aria-label="Close dialog"
+              onClick={handleClose}
+              disabled={isSubmitting}
+              className="text-[13px] font-medium text-ink-soft hover:text-ink px-2.5 py-1 rounded-[6px] hover:bg-sunken transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-primary cursor-pointer disabled:opacity-50"
+            >
+              Close
+            </button>
+          </div>
 
-        {/* Title & Subtitle */}
-        <div className="mb-6">
-          <h2
-            id="auth-dialog-title"
-            className="text-[28px] leading-[34px] font-bold text-ink"
-          >
-            {authMode === "login" ? "Log in" : "Create your log"}
-          </h2>
-          <p className="text-[14px] leading-[20px] text-ink-soft mt-1">
-            {authMode === "login"
-              ? "Pick up where your applications left off."
-              : "Track every application and every deadline in one place."}
-          </p>
-        </div>
+          {/* Title & Subtitle */}
+          <div className="mb-6">
+            <h2
+              id="auth-dialog-title"
+              className="text-[28px] leading-[34px] font-bold text-ink"
+            >
+              {authMode === "login" ? "Log in" : "Create your log"}
+            </h2>
+            <p className="text-[14px] leading-[20px] text-ink-soft mt-1">
+              {authMode === "login"
+                ? "Pick up where your applications left off."
+                : "Track every application and every deadline in one place."}
+            </p>
+          </div>
 
-        {/* Form */}
-        {authMode === "login" ? (
-          <LoginForm
-            initialEmail={prefilledEmail}
-            onSuccess={handleSuccess}
-            onSwitchToRegister={() => switchMode("register")}
-            onSubmittingChange={setIsSubmitting}
-          />
-        ) : (
-          <RegisterForm
-            onSuccess={handleSuccess}
-            onSwitchToLogin={(email) => switchMode("login", email)}
-            onSubmittingChange={setIsSubmitting}
-          />
-        )}
-      </div>
+          {/* Form */}
+          {authMode === "login" ? (
+            <LoginForm
+              initialEmail={prefilledEmail}
+              onSuccess={handleSuccess}
+              onSwitchToRegister={() => switchMode("register")}
+              onSubmittingChange={setIsSubmitting}
+            />
+          ) : (
+            <RegisterForm
+              onSuccess={handleSuccess}
+              onSwitchToLogin={(email) => switchMode("login", email)}
+              onSubmittingChange={setIsSubmitting}
+            />
+          )}
+        </div>
+      )}
     </dialog>
   );
 }

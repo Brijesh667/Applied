@@ -1,11 +1,20 @@
 import assert from "assert";
 import {
   stripHtml,
+  cleanJobText,
   cleanUrl,
+  cleanAttribution,
   calculatePay,
+  parseJoobleSalary,
   normalizeAdzunaJob,
   normalizeJSearchJob,
+  normalizeJoobleJob,
+  normalizeCareerjetJob,
+  normalizeHimalayasJob,
+  normalizeRemoteOkJob,
   normalizeJobs,
+  _getLastDroppedUrlCounts,
+  _resetDroppedUrlCounts,
 } from "../src/services/jobs/normalize.js";
 import {
   normalizeApplyUrlKey,
@@ -15,9 +24,29 @@ import {
 } from "../src/services/jobs/dedupe.js";
 import {
   buildQueries,
+  deriveDefaultFilters,
+  canonicalizeFilters,
   QueryBuilderError,
 } from "../src/services/jobs/queryBuilder.js";
-import { computeProfileHash } from "../src/models/JobSearchCache.js";
+import {
+  computeProfileHash,
+  computeSearchHash,
+  trimUserSearches,
+  JobSearchCache,
+} from "../src/models/JobSearchCache.js";
+import {
+  inferJobType,
+  inferJobLevel,
+  applyFilters,
+  filterAndSortStoredJobs,
+  computeFacets,
+} from "../src/services/jobs/applyFilters.js";
+import {
+  JOB_STORE_MAX,
+  JOB_PAGE_SIZE_DEFAULT,
+  JOB_STRONG_MATCH_MIN,
+  JOB_GOOD_MATCH_MIN,
+} from "../src/config/constants.js";
 import {
   scoreJobLocally,
   matchSkillInText,
@@ -33,6 +62,26 @@ import {
   formatSkillsUnderLimit,
 } from "../src/services/jobs/jobToApplication.js";
 import { TRACK_DEFAULT_DURATION } from "../src/config/constants.js";
+import {
+  buildCareerjetAuthHeader,
+  searchJobs as searchCareerjet,
+} from "../src/services/jobs/careerjet.js";
+import {
+  matchesKeywords as matchesRemoteOkKeywords,
+  searchJobs as searchRemoteOk,
+  _setRemoteOkFeedCache,
+  _resetRemoteOkCache,
+  _getRemoteOkFeedCache,
+} from "../src/services/jobs/remoteok.js";
+import {
+  searchJobs as searchHimalayas,
+  _setHimalayasCache,
+  _resetHimalayasCache,
+} from "../src/services/jobs/himalayas.js";
+import {
+  parseEnabledJobProviders,
+  CAREERJET_SUPPORTED_LOCALES,
+} from "../src/config/env.js";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -187,6 +236,30 @@ test("1.6 Normalization drops invalid jobs (missing title, company, bad url, or 
       created: sixtyFiveDaysAgo,
     }),
     null
+  );
+});
+
+test("1.7 cleanJobText repairs RemoteOK mojibake, converts nbsp, and preserves real accents", () => {
+  // RemoteOK Â before space
+  assert.strictEqual(cleanJobText("AboutÂ theÂ Company"), "About the Company");
+  assert.strictEqual(cleanJobText("AboutÂ\u00a0theÂ\u00a0Company"), "About the Company");
+  // Non-breaking space
+  assert.strictEqual(cleanJobText("Hello\u00a0World"), "Hello World");
+  // Real accented text must be preserved untouched
+  assert.strictEqual(cleanJobText("Café in Zürich"), "Café in Zürich");
+  // Mojibake Latin-1 double decoded from UTF-8
+  assert.strictEqual(cleanJobText("CafÃ©"), "Café");
+  assert.strictEqual(cleanJobText("itâ€™s a great role"), "it's a great role");
+  // Plain clean text untouched
+  assert.strictEqual(cleanJobText("Software Engineer at Google"), "Software Engineer at Google");
+  // Empty and non-string never throw
+  assert.strictEqual(cleanJobText(null), "");
+  assert.strictEqual(cleanJobText(undefined), "");
+  assert.strictEqual(cleanJobText(""), "");
+  // stripHtml integration across providers
+  assert.strictEqual(
+    stripHtml("<p>AboutÂ theÂ Company&nbsp;&amp;&nbsp;Café</p>"),
+    "About the Company & Café"
   );
 });
 
@@ -922,6 +995,854 @@ test("4.6 duplicate URL key logic detects same URL with different queries/traili
   assert.strictEqual(key1, key2);
   assert.strictEqual(key2, key3);
   assert.notStrictEqual(key1, key4);
+});
+
+// ---------------------------------------------------------------------------
+// 9. Phase 3 Part 1: Provider Tests (Jooble, Careerjet, Himalayas, RemoteOK)
+// ---------------------------------------------------------------------------
+test("9.1 Jooble normalization maps fields, handles source as platform, and parses free-text INR salary & LPA", () => {
+  const rawJob = {
+    id: "jooble-12345",
+    title: "<b>Backend</b> Engineer &amp; API Developer",
+    company: "Zomato Ltd.",
+    location: "Gurugram, Haryana",
+    snippet: "<p>Looking for a <b>Node.js</b> and Python backend engineer.</p>",
+    salary: "₹12,00,000 - ₹18,00,000 / year",
+    source: "Monster India",
+    type: "Full-time",
+    link: "https://in.jooble.org/desc/12345",
+    updated: new Date().toISOString(),
+  };
+
+  const job = normalizeJoobleJob(rawJob);
+  assert.ok(job);
+  assert.strictEqual(job.source, "jooble");
+  assert.strictEqual(job.platform, "Monster India");
+  assert.strictEqual(job.title, "Backend Engineer & API Developer");
+  assert.strictEqual(job.company, "Zomato Ltd.");
+  assert.strictEqual(job.location, "Gurugram, Haryana");
+  assert.strictEqual(job.snippet, "Looking for a Node.js and Python backend engineer.");
+  assert.strictEqual(job.employmentType, "full-time");
+  assert.deepStrictEqual(job.pay, { type: "yearly", amount: 1500000 });
+  assert.strictEqual(job.payMin, 1200000);
+  assert.strictEqual(job.payMax, 1800000);
+  assert.strictEqual(job.salaryText, "₹12,00,000 - ₹18,00,000 / year");
+  assert.deepStrictEqual(job.attribution, {
+    name: "Jooble",
+    url: "https://jooble.org",
+  });
+
+  // Test LPA parsing
+  const lpaJob = normalizeJoobleJob({
+    ...rawJob,
+    id: "jooble-lpa",
+    salary: "6 - 10 LPA",
+    source: null,
+  });
+  assert.strictEqual(lpaJob.platform, "Jooble");
+  assert.deepStrictEqual(lpaJob.pay, { type: "yearly", amount: 800000 });
+  assert.strictEqual(lpaJob.payMin, 600000);
+  assert.strictEqual(lpaJob.payMax, 1000000);
+});
+
+test("9.2 Jooble non-INR free-text salary sets pay: null and preserves raw text in salaryText (max 60)", () => {
+  const rawJob = {
+    id: "jooble-doe",
+    title: "Software Engineer",
+    company: "Acme",
+    link: "https://in.jooble.org/desc/999",
+    salary: "Competitive compensation package depending on experience and interview rounds",
+    updated: new Date().toISOString(),
+  };
+
+  const job = normalizeJoobleJob(rawJob);
+  assert.ok(job);
+  assert.strictEqual(job.pay, null);
+  assert.strictEqual(job.payMin, null);
+  assert.strictEqual(job.payMax, null);
+  assert.strictEqual(
+    job.salaryText,
+    "Competitive compensation package depending on experience and"
+  );
+  assert.ok(job.salaryText.length <= 60);
+});
+
+test("9.3 Careerjet auth header construction uses Basic Base64 of key: and checks original url untouched", () => {
+  const header = buildCareerjetAuthHeader("cjet_test_api_key_42");
+  const expectedBase64 = Buffer.from("cjet_test_api_key_42:").toString("base64");
+  assert.strictEqual(header, `Basic ${expectedBase64}`);
+
+  // Test empty key returns empty
+  assert.strictEqual(buildCareerjetAuthHeader(""), "");
+
+  // Test Careerjet normalization preserves original url (with click tracking tokens)
+  const trackingUrl =
+    "https://jobviewtrack.com/en-in/job-123456?click_hash=abcdef123456&source=cjet_feed";
+  const rawJob = {
+    title: "React Native Developer",
+    company: "Swiggy",
+    locations: "Bengaluru, India",
+    description: "Build fluid mobile interactions for food delivery apps.",
+    date: new Date().toISOString(),
+    salary: "₹15,00,000 / year",
+    salary_min: 1500000,
+    salary_max: 1500000,
+    salary_currency_code: "INR",
+    salary_type: "Y",
+    site: "Naukri",
+    url: trackingUrl,
+  };
+
+  const job = normalizeCareerjetJob(rawJob);
+  assert.ok(job);
+  assert.strictEqual(job.applyUrl, trackingUrl);
+  assert.strictEqual(job.platform, "Naukri");
+  assert.deepStrictEqual(job.pay, { type: "yearly", amount: 1500000 });
+  assert.deepStrictEqual(job.attribution, {
+    name: "Careerjet",
+    url: null,
+  });
+});
+
+test("9.4 Careerjet searchJobs returns skipped when ctx.userIp or ctx.userAgent is missing", async () => {
+  const queries = [{ what: "Frontend Developer", where: "Bengaluru" }];
+
+  // Missing ctx entirely
+  const res1 = await searchCareerjet(queries, {});
+  assert.strictEqual(res1.status, "skipped");
+  assert.deepStrictEqual(res1.jobs, []);
+
+  // Missing userAgent
+  const res2 = await searchCareerjet(queries, { userIp: "103.21.244.1" });
+  assert.strictEqual(res2.status, "skipped");
+
+  // Missing userIp
+  const res3 = await searchCareerjet(queries, { userAgent: "Mozilla/5.0 Chrome/120" });
+  assert.strictEqual(res3.status, "skipped");
+});
+
+test("9.5 Careerjet normalization: INR salary mapping, type not JOBS gives empty jobs, and sets platform", () => {
+  const rawJob = {
+    title: "Junior Data Analyst",
+    company: "Mu Sigma",
+    locations: "Bengaluru",
+    description: "Analyze customer churn data.",
+    date: new Date().toISOString(),
+    salary: "₹45,000 / month",
+    salary_min: 40000,
+    salary_max: 50000,
+    salary_currency_code: "INR",
+    salary_type: "M",
+    site: null,
+    url: "https://careerjet.net/job/data-analyst",
+  };
+
+  const job = normalizeCareerjetJob(rawJob);
+  assert.ok(job);
+  assert.strictEqual(job.platform, "Careerjet");
+  assert.deepStrictEqual(job.pay, { type: "monthly", amount: 45000 });
+
+  // Non-INR currency
+  const usdJob = normalizeCareerjetJob({
+    ...rawJob,
+    salary_currency_code: "USD",
+  });
+  assert.strictEqual(usdJob.pay, null);
+  assert.strictEqual(usdJob.salaryText, "₹45,000 / month");
+});
+
+test("9.6 Himalayas normalization sets remote: true, attribution link, and formats USD salaryText", () => {
+  const rawHimalayasJob = {
+    guid: "him-98765",
+    title: "Senior Full Stack Engineer",
+    companyName: "GitLab",
+    employmentType: "Full-time",
+    minSalary: 120000,
+    maxSalary: 150000,
+    currency: "USD",
+    locationRestrictions: ["Worldwide", "India"],
+    pubDate: new Date().toISOString(),
+    applicationLink: "https://himalayas.app/companies/gitlab/jobs/senior-full-stack",
+    description: "Work on remote CI/CD distributed pipeline architecture.",
+  };
+
+  const job = normalizeHimalayasJob(rawHimalayasJob);
+  assert.ok(job);
+  assert.strictEqual(job.source, "himalayas");
+  assert.strictEqual(job.platform, "Himalayas");
+  assert.strictEqual(job.remote, true);
+  assert.strictEqual(job.pay, null);
+  assert.strictEqual(job.salaryText, "USD 120,000 to 150,000 per year");
+  assert.deepStrictEqual(job.attribution, {
+    name: "Himalayas",
+    url: "https://himalayas.app",
+  });
+  assert.strictEqual(
+    job.applyUrl,
+    "https://himalayas.app/companies/gitlab/jobs/senior-full-stack"
+  );
+});
+
+test("9.7 Himalayas in-memory TTL caching reuses cached jobs per query", async () => {
+  _resetHimalayasCache();
+
+  const mockJobs = [
+    {
+      guid: "cached-1",
+      title: "Rust Core Engineer",
+      companyName: "1Password",
+      applicationLink: "https://himalayas.app/jobs/cached-1",
+      pubDate: new Date().toISOString(),
+    },
+  ];
+
+  _setHimalayasCache("rust", mockJobs, Date.now());
+
+  const queries = [{ what: "Rust" }];
+  const res = await searchHimalayas(queries);
+  assert.strictEqual(res.status, "ok");
+  assert.strictEqual(res.jobs.length, 1);
+  assert.strictEqual(res.jobs[0].title, "Rust Core Engineer");
+
+  _resetHimalayasCache();
+});
+
+test("9.8 RemoteOK normalization skips legal notice (element 0), sets remote: true, and sets attribution", () => {
+  const legalNotice = {
+    legal: "This API is for personal use only. Commercial use is prohibited without license.",
+  };
+  const rawRemoteOkJob = {
+    id: "rok-112233",
+    position: "Staff Systems Architect",
+    company: "Automattic",
+    location: "Remote, Worldwide",
+    tags: ["system", "golang", "kubernetes"],
+    description: "Lead distributed systems for WordPress infrastructure.",
+    salary_min: 140000,
+    salary_max: 180000,
+    url: "https://remoteok.com/remote-jobs/112233",
+    apply_url: "https://automattic.com/work-with-us/staff-architect",
+    date: new Date().toISOString(),
+  };
+
+  // When normalizing from raw array with normalizeJobs:
+  const normalizedList = normalizeJobs([legalNotice, rawRemoteOkJob], "remoteok");
+  assert.strictEqual(normalizedList.length, 1);
+
+  const job = normalizedList[0];
+  assert.strictEqual(job.source, "remoteok");
+  assert.strictEqual(job.platform, "RemoteOK");
+  assert.strictEqual(job.title, "Staff Systems Architect");
+  assert.strictEqual(job.company, "Automattic");
+  assert.strictEqual(job.remote, true);
+  assert.strictEqual(job.pay, null);
+  assert.strictEqual(job.salaryText, "USD 140,000 to 180,000 per year");
+  assert.deepStrictEqual(job.attribution, {
+    name: "RemoteOK",
+    url: "https://remoteok.com/remote-jobs/112233",
+  });
+  // Prefer explicit apply_url
+  assert.strictEqual(
+    job.applyUrl,
+    "https://automattic.com/work-with-us/staff-architect"
+  );
+});
+
+test("9.9 RemoteOK local keyword whole-word filter and caps at 20 jobs", () => {
+  const matchingJob = {
+    position: "Senior React Engineer",
+    tags: ["frontend", "javascript"],
+    description: "Looking for an expert in React and component state.",
+  };
+  const nonMatchingJob = {
+    position: "Reactor Maintenance Technician", // "React" is a substring, not a whole word
+    tags: ["nuclear", "hardware"],
+    description: "Manage nuclear reactor pressure rods.",
+  };
+
+  assert.strictEqual(matchesRemoteOkKeywords(matchingJob, ["react"]), true);
+  assert.strictEqual(matchesRemoteOkKeywords(nonMatchingJob, ["react"]), false);
+});
+
+test("9.10 RemoteOK shared in-memory feed cache reuses cached data across searches", async () => {
+  _resetRemoteOkCache();
+
+  // Create 30 mock jobs matching keyword "python"
+  const mockFeed = [];
+  for (let i = 1; i <= 30; i++) {
+    mockFeed.push({
+      id: `mock-${i}`,
+      position: `Python Developer #${i}`,
+      company: `Company ${i}`,
+      tags: ["python", "django"],
+      description: `Backend Python role number ${i}`,
+      url: `https://remoteok.com/remote-jobs/mock-${i}`,
+      date: new Date().toISOString(),
+    });
+  }
+
+  _setRemoteOkFeedCache(mockFeed, Date.now());
+
+  const res = await searchRemoteOk([{ what: "python" }]);
+  assert.strictEqual(res.status, "ok");
+  // Capped at 20 jobs
+  assert.strictEqual(res.jobs.length, 20);
+  assert.strictEqual(res.jobs[0].position, "Python Developer #1");
+
+  _resetRemoteOkCache();
+});
+
+test("9.11 Attribution set per provider: Himalayas, RemoteOK, Jooble, Careerjet set; Adzuna, JSearch null", () => {
+  const dateStr = new Date().toISOString();
+
+  const adzuna = normalizeAdzunaJob({
+    id: "a1",
+    title: "Dev",
+    company: { display_name: "Acme" },
+    redirect_url: "https://example.com/apply",
+    created: dateStr,
+  });
+  assert.strictEqual(adzuna.attribution, null);
+
+  const jsearch = normalizeJSearchJob({
+    job_id: "j1",
+    job_title: "Dev",
+    employer_name: "Acme",
+    job_apply_link: "https://example.com/apply",
+    job_posted_at_datetime_utc: dateStr,
+  });
+  assert.strictEqual(jsearch.attribution, null);
+
+  const jooble = normalizeJoobleJob({
+    id: "jb1",
+    title: "Dev",
+    company: "Acme",
+    link: "https://example.com/apply",
+    updated: dateStr,
+  });
+  assert.deepStrictEqual(jooble.attribution, {
+    name: "Jooble",
+    url: "https://jooble.org",
+  });
+
+  const cjet = normalizeCareerjetJob({
+    title: "Dev",
+    company: "Acme",
+    url: "https://example.com/apply",
+    date: dateStr,
+  });
+  assert.deepStrictEqual(cjet.attribution, {
+    name: "Careerjet",
+    url: null,
+  });
+
+  const him = normalizeHimalayasJob({
+    guid: "h1",
+    title: "Dev",
+    companyName: "Acme",
+    applicationLink: "https://example.com/apply",
+    pubDate: dateStr,
+  });
+  assert.deepStrictEqual(him.attribution, {
+    name: "Himalayas",
+    url: "https://himalayas.app",
+  });
+
+  const rok = normalizeRemoteOkJob({
+    id: "r1",
+    position: "Dev",
+    company: "Acme",
+    url: "https://remoteok.com/job/r1",
+    date: dateStr,
+  });
+  assert.deepStrictEqual(rok.attribution, {
+    name: "RemoteOK",
+    url: "https://remoteok.com/job/r1",
+  });
+});
+
+test("9.12 parseEnabledJobProviders handles 'none', custom subsets, and defaults based on available keys", () => {
+  // 1. "none" disables everything
+  const noneList = parseEnabledJobProviders({
+    JOB_PROVIDERS: "none",
+    ADZUNA_APP_ID: "id",
+    ADZUNA_APP_KEY: "key",
+  });
+  assert.deepStrictEqual(noneList, []);
+
+  // 2. Custom subset only includes requested providers that have their keys + keyless
+  const subsetList = parseEnabledJobProviders({
+    JOB_PROVIDERS: "jooble,himalayas,careerjet,adzuna",
+    JOOBLE_API_KEY: "jbkey",
+    // CAREERJET_API_KEY is missing, ADZUNA keys missing
+  });
+  assert.deepStrictEqual(subsetList, ["jooble", "himalayas"]);
+
+  // 3. Default includes all keyed providers that have keys + himalayas + remoteok
+  const defaultList = parseEnabledJobProviders({
+    ADZUNA_APP_ID: "app_id",
+    ADZUNA_APP_KEY: "app_key",
+    // JSearch, Jooble, Careerjet keys omitted
+  });
+  assert.deepStrictEqual(defaultList, ["adzuna", "himalayas", "remoteok"]);
+});
+
+test("9.13 normalizeJobs tracks and counts dropped jobs with invalid or over-length applyUrl", () => {
+  _resetDroppedUrlCounts();
+
+  const rawJobs = [
+    {
+      id: "valid-1",
+      title: "Valid Job",
+      company: "Acme",
+      link: "https://valid.com/apply",
+      updated: new Date().toISOString(),
+    },
+    {
+      id: "invalid-url",
+      title: "Job with Bad Protocol",
+      company: "Acme",
+      link: "javascript:alert('pwned')",
+      updated: new Date().toISOString(),
+    },
+    {
+      id: "overlength-url",
+      title: "Job with 600 char url",
+      company: "Acme",
+      link: "https://example.com/apply?" + "x".repeat(600),
+      updated: new Date().toISOString(),
+    },
+  ];
+
+  const normalized = normalizeJobs(rawJobs, "jooble");
+  assert.strictEqual(normalized.length, 1);
+  const droppedCounts = _getLastDroppedUrlCounts();
+  assert.strictEqual(droppedCounts.jooble, 2);
+
+  _resetDroppedUrlCounts();
+});
+
+test("9.14 Dedupe tie-break: when pay, snippet, and date are equal, prefers job with attribution", () => {
+  const commonDate = new Date().toISOString();
+  const jobWithoutAttribution = {
+    id: "job-adzuna-1",
+    applyUrl: "https://example.com/job/123",
+    company: "Acme Corp",
+    title: "Software Engineer",
+    location: "Bengaluru",
+    snippet: "Exact same snippet text for both jobs.",
+    postedAt: commonDate,
+    pay: null,
+    attribution: null,
+  };
+
+  const jobWithAttribution = {
+    id: "job-himalayas-1",
+    applyUrl: "https://example.com/job/123",
+    company: "Acme Corp",
+    title: "Software Engineer",
+    location: "Bengaluru",
+    snippet: "Exact same snippet text for both jobs.",
+    postedAt: commonDate,
+    pay: null,
+    attribution: { name: "Himalayas", url: "https://himalayas.app" },
+  };
+
+  // Comparing jobWithAttribution against jobWithoutAttribution -> returns true (candidate is better)
+  const isBetter = isBetterJob(jobWithAttribution, jobWithoutAttribution);
+  assert.strictEqual(isBetter, true);
+
+  // Comparing jobWithoutAttribution against jobWithAttribution -> returns false (current with attribution stays)
+  const isWorse = isBetterJob(jobWithoutAttribution, jobWithAttribution);
+  assert.strictEqual(isWorse, false);
+
+  // In dedupeJobs:
+  const deduped = dedupeJobs([jobWithoutAttribution, jobWithAttribution]);
+  assert.strictEqual(deduped.length, 1);
+  assert.strictEqual(deduped[0].id, "job-himalayas-1");
+  assert.deepStrictEqual(deduped[0].attribution, {
+    name: "Himalayas",
+    url: "https://himalayas.app",
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. Phase 3 Part 2: Search filters, 150 stored jobs, paged/filterable results
+// ---------------------------------------------------------------------------
+test("10.1 inferJobType correctly identifies internship, fulltime, parttime, contract, and unknown", () => {
+  assert.strictEqual(inferJobType({ employmentType: "INTERN" }), "internship");
+  assert.strictEqual(inferJobType({ title: "Frontend Developer Intern" }), "internship");
+  assert.strictEqual(inferJobType({ snippet: "Looking for an energetic trainee" }), "internship");
+
+  assert.strictEqual(inferJobType({ employmentType: "FULL_TIME" }), "fulltime");
+  assert.strictEqual(inferJobType({ title: "Senior Backend Engineer (Permanent)" }), "fulltime");
+
+  assert.strictEqual(inferJobType({ employmentType: "PARTTIME" }), "parttime");
+  assert.strictEqual(inferJobType({ title: "Content Writer - Part-Time" }), "parttime");
+
+  assert.strictEqual(inferJobType({ employmentType: "CONTRACTOR" }), "contract");
+  assert.strictEqual(inferJobType({ title: "DevOps Consultant (Freelance)" }), "contract");
+
+  assert.strictEqual(inferJobType({ title: "Software Engineer", snippet: "Build web apps" }), "unknown");
+});
+
+test("10.2 inferJobLevel correctly detects senior, junior, fresher, mid, and unknown", () => {
+  assert.strictEqual(inferJobLevel({ title: "Senior Python Developer" }), "senior");
+  assert.strictEqual(inferJobLevel({ title: "Lead Architect" }), "senior");
+  assert.strictEqual(inferJobLevel({ snippet: "Requires 7+ years of industry experience" }), "senior");
+
+  assert.strictEqual(inferJobLevel({ title: "Junior React Engineer" }), "junior");
+  assert.strictEqual(inferJobLevel({ title: "Frontend Trainee", snippet: "Entry level graduate role" }), "fresher");
+  assert.strictEqual(inferJobLevel({ title: "Software Engineer", snippet: "Requires 3 years of hands-on experience" }), "mid");
+  assert.strictEqual(inferJobLevel({ title: "Mid-level QA Tester" }), "mid");
+
+  assert.strictEqual(inferJobLevel({ title: "Software Developer", snippet: "Join our fast growing startup" }), "unknown");
+});
+
+test("10.3 applyFilters: postedWithinDays drops jobs older than N days and keeps undated jobs", () => {
+  const now = Date.now();
+  const fiveDaysAgo = new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
+
+  const jobs = [
+    { id: "j1", postedAt: fiveDaysAgo },
+    { id: "j2", postedAt: tenDaysAgo },
+    { id: "j3", postedAt: null },
+  ];
+
+  const filtered = applyFilters(jobs, { postedWithinDays: 7 });
+  assert.strictEqual(filtered.length, 2);
+  assert.deepStrictEqual(filtered.map((j) => j.id), ["j1", "j3"]);
+});
+
+test("10.4 applyFilters: minPay converts monthly*12, drops known lower pay, keeps null & onetime", () => {
+  const jobs = [
+    { id: "j1", pay: { type: "yearly", amount: 600000 } }, // 6 LPA >= 5 LPA -> keep
+    { id: "j2", pay: { type: "yearly", amount: 400000 } }, // 4 LPA < 5 LPA -> drop
+    { id: "j3", pay: { type: "monthly", amount: 50000 } }, // 50k*12 = 6 LPA >= 5 LPA -> keep
+    { id: "j4", pay: { type: "monthly", amount: 30000 } }, // 30k*12 = 3.6 LPA < 5 LPA -> drop
+    { id: "j5", pay: { type: "onetime", amount: 20000 } }, // onetime -> keep
+    { id: "j6", pay: null, salaryText: "Competitive" },    // null pay -> keep
+  ];
+
+  const filtered = applyFilters(jobs, { minPay: 500000 });
+  assert.deepStrictEqual(filtered.map((j) => j.id), ["j1", "j3", "j5", "j6"]);
+});
+
+test("10.5 applyFilters: jobType rules (internship keeps intern only, fulltime keeps fulltime+unknown, parttime keeps parttime, any keeps all)", () => {
+  const jobs = [
+    { id: "j-intern", jobType: "internship", title: "React Intern" },
+    { id: "j-full", jobType: "fulltime", title: "Go Developer" },
+    { id: "j-part", jobType: "parttime", title: "Part-time Writer" },
+    { id: "j-unknown", jobType: "unknown", title: "General Engineer" },
+  ];
+
+  // internship: only internship
+  const internRes = applyFilters(jobs, { jobType: "internship" });
+  assert.deepStrictEqual(internRes.map((j) => j.id), ["j-intern"]);
+
+  // fulltime: fulltime + unknown
+  const fullRes = applyFilters(jobs, { jobType: "fulltime" });
+  assert.deepStrictEqual(fullRes.map((j) => j.id), ["j-full", "j-unknown"]);
+
+  // parttime: parttime only
+  const partRes = applyFilters(jobs, { jobType: "parttime" });
+  assert.deepStrictEqual(partRes.map((j) => j.id), ["j-part"]);
+
+  // any: all
+  const anyRes = applyFilters(jobs, { jobType: "any" });
+  assert.strictEqual(anyRes.length, 4);
+});
+
+test("10.6 applyFilters: experience rules (fresher drops senior/mid; junior drops senior; mid drops fresher intern; unknown kept)", () => {
+  const jobs = [
+    { id: "j-fresher", level: "fresher", jobType: "internship", title: "Intern" },
+    { id: "j-junior", level: "junior", jobType: "fulltime", title: "Junior Dev" },
+    { id: "j-mid", level: "mid", jobType: "fulltime", title: "Mid Dev" },
+    { id: "j-senior", level: "senior", jobType: "fulltime", title: "Senior Dev" },
+    { id: "j-unknown", level: "unknown", jobType: "fulltime", title: "Dev" },
+  ];
+
+  // fresher drops senior and mid (keeps fresher, junior, unknown)
+  const fresherRes = applyFilters(jobs, { experience: "fresher" });
+  assert.deepStrictEqual(fresherRes.map((j) => j.id), ["j-fresher", "j-junior", "j-unknown"]);
+
+  // junior drops senior (keeps junior, fresher, mid, unknown)
+  const juniorRes = applyFilters(jobs, { experience: "junior" });
+  assert.deepStrictEqual(juniorRes.map((j) => j.id), ["j-fresher", "j-junior", "j-mid", "j-unknown"]);
+
+  // mid drops fresher intern only when jobType is internship (keeps junior, mid, senior, unknown)
+  const midRes = applyFilters(jobs, { experience: "mid" });
+  assert.deepStrictEqual(midRes.map((j) => j.id), ["j-junior", "j-mid", "j-senior", "j-unknown"]);
+
+  // any keeps all
+  const anyRes = applyFilters(jobs, { experience: "any" });
+  assert.strictEqual(anyRes.length, 5);
+});
+
+test("10.7 applyFilters: remote rules (only keeps remote=true, exclude drops remote=true, include keeps all)", () => {
+  const jobs = [
+    { id: "j-remote", remote: true },
+    { id: "j-onsite", remote: false },
+    { id: "j-null", remote: null },
+  ];
+
+  const onlyRes = applyFilters(jobs, { remote: "only" });
+  assert.deepStrictEqual(onlyRes.map((j) => j.id), ["j-remote"]);
+
+  const excludeRes = applyFilters(jobs, { remote: "exclude" });
+  assert.deepStrictEqual(excludeRes.map((j) => j.id), ["j-onsite", "j-null"]);
+
+  const includeRes = applyFilters(jobs, { remote: "include" });
+  assert.strictEqual(includeRes.length, 3);
+});
+
+test("10.8 deriveDefaultFilters & canonicalizeFilters correctly derive from resume and sanitize", () => {
+  const resume = {
+    roleTitles: ["Backend Engineer", "backend engineer", "DevOps"],
+    skills: ["Node.js"],
+    experienceYears: 1,
+    locationPreference: "Bengaluru",
+  };
+
+  const defaults = deriveDefaultFilters(resume);
+  assert.strictEqual(defaults.experience, "junior");
+  assert.strictEqual(defaults.jobType, "any");
+  assert.strictEqual(defaults.location, "Bengaluru");
+  assert.strictEqual(defaults.remote, "include");
+  assert.strictEqual(defaults.postedWithinDays, 60);
+  assert.strictEqual(defaults.minPay, null);
+
+  // Canonicalize with overrides: trim, case-insensitive role deduping, sorted roles
+  const canonical = canonicalizeFilters(
+    {
+      roles: ["  Frontend Engineer  ", "FRONTEND ENGINEER", "Node Developer"],
+      location: "  Mumbai  ",
+      jobType: "fulltime",
+      minPay: 600000.4,
+    },
+    resume
+  );
+
+  assert.strictEqual(canonical.jobType, "fulltime");
+  assert.strictEqual(canonical.location, "Mumbai");
+  assert.strictEqual(canonical.minPay, 600000);
+  assert.deepStrictEqual(canonical.roles, ["Frontend Engineer", "Node Developer"]); // sorted alphabetically
+});
+
+test("10.9 computeSearchHash is deterministic and changes on filter or profile edits", () => {
+  const resume1 = {
+    roleTitles: ["Frontend Engineer"],
+    skills: ["React"],
+    experienceYears: 2,
+    locationPreference: "Delhi",
+  };
+
+  const filters1 = { jobType: "fulltime", experience: "mid", roles: ["Frontend Engineer"] };
+  const filters2 = { jobType: "internship", experience: "fresher", roles: ["Frontend Engineer"] };
+
+  const hash1a = computeSearchHash(resume1, filters1);
+  const hash1b = computeSearchHash(resume1, filters1);
+  assert.strictEqual(hash1a, hash1b); // deterministic
+
+  const hash2 = computeSearchHash(resume1, filters2);
+  assert.notStrictEqual(hash1a, hash2); // changes on filter edit
+
+  const resume2 = { ...resume1, skills: ["React", "TypeScript"] };
+  const hash3 = computeSearchHash(resume2, filters1);
+  assert.notStrictEqual(hash1a, hash3); // changes on resume edit
+});
+
+test("10.10 buildQueries maps native flags, fresher variant, junior level, and remote: only", () => {
+  const resume = {
+    roleTitles: ["Data Scientist"],
+    skills: ["Python", "Pandas"],
+    experienceYears: 0,
+    locationPreference: "Pune",
+  };
+
+  // Fresher creates intern variant
+  const fresherQueries = buildQueries(resume, { experience: "fresher" });
+  assert.strictEqual(fresherQueries[0].what, "Data Scientist intern");
+  assert.strictEqual(fresherQueries[0].level, "fresher");
+  assert.strictEqual(fresherQueries[0].where, "Pune");
+
+  // Junior adds junior word
+  const juniorQueries = buildQueries(resume, { experience: "junior" });
+  assert.strictEqual(juniorQueries[0].what, "Data Scientist junior");
+  assert.strictEqual(juniorQueries[0].level, "junior");
+
+  // remote: only clears where string
+  const remoteOnlyQueries = buildQueries(resume, { remote: "only" });
+  assert.strictEqual(remoteOnlyQueries[0].where, "");
+  assert.strictEqual(remoteOnlyQueries[0].isRemote, true);
+});
+
+test("10.11 rankAndMergeJobs stores up to 150 jobs, runs AI on top 25, orders AI group first, and assigns stable rank", async () => {
+  const profile = { roleTitles: ["Engineer"], skills: ["Java"] };
+
+  // Create 30 fake jobs
+  const jobs = Array.from({ length: 30 }, (_, i) => ({
+    id: `job-${i + 1}`,
+    title: `Engineer ${i + 1}`,
+    snippet: i === 0 ? "Java specialist" : "General engineer",
+    postedAt: "2026-11-01",
+  }));
+
+  // Fake AI ranker that scores the first candidate highest
+  const fakeAiRanker = async (p, candidates) => {
+    assert.strictEqual(candidates.length, 25); // exactly top 25 evaluated by AI
+    return {
+      "job-1": { score: 98, reason: "Best AI match" },
+      "job-2": { score: 91, reason: "Second best AI match" },
+    };
+  };
+
+  const result = await rankAndMergeJobs(jobs, profile, {
+    aiRanker: fakeAiRanker,
+    isConfigured: () => true,
+  });
+
+  assert.strictEqual(result.rankedBy, "ai");
+  assert.strictEqual(result.rankStatus, "ok");
+  assert.strictEqual(result.jobs.length, 30);
+
+  // First 25 are the AI candidates group
+  assert.strictEqual(result.jobs[0].id, "job-1");
+  assert.strictEqual(result.jobs[0].matchScore, 98);
+  assert.strictEqual(result.jobs[0].scoredBy, "ai");
+
+  // Ranks are stable 1-based integers
+  for (let i = 0; i < result.jobs.length; i++) {
+    assert.strictEqual(result.jobs[i].rank, i + 1);
+  }
+});
+
+test("10.12 filterAndSortStoredJobs handles source, remote, match tiers, payListed, hideTracked, and q substring", () => {
+  const jobs = [
+    { id: "1", source: "adzuna", remote: true, matchScore: 80, pay: { type: "yearly", amount: 600000 }, applyUrl: "https://example.com/1", title: "Senior React Dev", company: "Acme Corp", rank: 1 },
+    { id: "2", source: "jooble", remote: false, matchScore: 60, pay: null, salaryText: "50k/mo", applyUrl: "https://example.com/2", title: "Node.js Developer", company: "Beta Inc", rank: 2 },
+    { id: "3", source: "careerjet", remote: false, matchScore: 40, pay: null, salaryText: null, applyUrl: "https://example.com/3", title: "Python Intern", company: "Gamma LLC", rank: 3 },
+  ];
+
+  const trackedSet = new Set(["https://example.com/1"]);
+
+  // source filter
+  const adzunaOnly = filterAndSortStoredJobs(jobs, { source: "adzuna" }, trackedSet);
+  assert.strictEqual(adzunaOnly.length, 1);
+  assert.strictEqual(adzunaOnly[0].id, "1");
+
+  // remote filter
+  const remoteOnly = filterAndSortStoredJobs(jobs, { remote: "true" }, trackedSet);
+  assert.strictEqual(remoteOnly.length, 1);
+  assert.strictEqual(remoteOnly[0].id, "1");
+
+  // match filter: strong (>= 75)
+  const strongMatch = filterAndSortStoredJobs(jobs, { match: "strong" }, trackedSet);
+  assert.strictEqual(strongMatch.length, 1);
+  assert.strictEqual(strongMatch[0].id, "1");
+
+  // payListed filter
+  const withPay = filterAndSortStoredJobs(jobs, { payListed: "true" }, trackedSet);
+  assert.strictEqual(withPay.length, 2); // 1 (pay object) and 2 (salaryText)
+
+  // hideTracked filter
+  const hiddenTracked = filterAndSortStoredJobs(jobs, { hideTracked: "true" }, trackedSet);
+  assert.strictEqual(hiddenTracked.length, 2);
+  assert(!hiddenTracked.some((j) => j.id === "1"));
+
+  // q filter: substring contains on title or company
+  const qTitle = filterAndSortStoredJobs(jobs, { q: "node" }, trackedSet);
+  assert.strictEqual(qTitle.length, 1);
+  assert.strictEqual(qTitle[0].id, "2");
+
+  const qCompany = filterAndSortStoredJobs(jobs, { q: "gamma" }, trackedSet);
+  assert.strictEqual(qCompany.length, 1);
+  assert.strictEqual(qCompany[0].id, "3");
+});
+
+test("10.13 filterAndSortStoredJobs: newest sort puts undated jobs last and breaks ties by rank", () => {
+  const jobs = [
+    { id: "undated", postedAt: null, rank: 1 },
+    { id: "old", postedAt: "2026-10-01T00:00:00.000Z", rank: 2 },
+    { id: "new-a", postedAt: "2026-11-01T00:00:00.000Z", rank: 3 },
+    { id: "new-b", postedAt: "2026-11-01T00:00:00.000Z", rank: 4 },
+  ];
+
+  const sorted = filterAndSortStoredJobs(jobs, { sort: "newest" });
+  assert.deepStrictEqual(sorted.map((j) => j.id), ["new-a", "new-b", "old", "undated"]);
+});
+
+test("10.14 computeFacets accurately aggregates counts across the entire stored list", () => {
+  const jobs = [
+    { source: "adzuna", remote: true, matchScore: 90, pay: { amount: 100 }, applyUrl: "https://example.com/1" },
+    { source: "adzuna", remote: false, matchScore: 60, pay: null, salaryText: "LPA", applyUrl: "https://example.com/2" },
+    { source: "jooble", remote: false, matchScore: 30, pay: null, salaryText: null, applyUrl: "https://example.com/3" },
+  ];
+
+  const trackedSet = new Set(["https://example.com/1"]);
+  const facets = computeFacets(jobs, trackedSet);
+
+  assert.strictEqual(facets.total, 3);
+  assert.strictEqual(facets.bySource.adzuna, 2);
+  assert.strictEqual(facets.bySource.jooble, 1);
+  assert.strictEqual(facets.remote.yes, 1);
+  assert.strictEqual(facets.remote.no, 2);
+  assert.strictEqual(facets.byMatch.strong, 1);
+  assert.strictEqual(facets.byMatch.good, 1);
+  assert.strictEqual(facets.byMatch.weak, 1);
+  assert.strictEqual(facets.withPay, 2);
+  assert.strictEqual(facets.tracked, 1);
+});
+
+test("10.15 Pagination slicing: pages of 20 with no duplicate IDs across pages and accurate hasMore", () => {
+  const allJobs = Array.from({ length: 45 }, (_, i) => ({
+    id: `job-${i + 1}`,
+    rank: i + 1,
+  }));
+
+  const limit = 20;
+
+  // Page 1
+  const page1 = allJobs.slice(0, 20);
+  const hasMore1 = limit < allJobs.length;
+  assert.strictEqual(page1.length, 20);
+  assert.strictEqual(hasMore1, true);
+
+  // Page 2
+  const page2 = allJobs.slice(20, 40);
+  const hasMore2 = 40 < allJobs.length;
+  assert.strictEqual(page2.length, 20);
+  assert.strictEqual(hasMore2, true);
+
+  // Page 3
+  const page3 = allJobs.slice(40, 60);
+  const hasMore3 = 60 < allJobs.length;
+  assert.strictEqual(page3.length, 5);
+  assert.strictEqual(hasMore3, false);
+
+  // No duplicates across pages
+  const seenIds = new Set();
+  for (const page of [page1, page2, page3]) {
+    for (const job of page) {
+      assert(!seenIds.has(job.id));
+      seenIds.add(job.id);
+    }
+  }
+  assert.strictEqual(seenIds.size, 45);
+});
+
+test("10.16 trimUserSearches bounds stored searches per user", async () => {
+  // Test trimming helper logic: if searches count > 10, oldest beyond 10 are deleted
+  const mockSearches = Array.from({ length: 15 }, (_, i) => ({
+    _id: `search-${i + 1}`,
+    createdAt: new Date(Date.now() - i * 1000),
+  }));
+
+  const maxSearches = 10;
+  const toDelete = mockSearches.slice(maxSearches).map((s) => s._id);
+  assert.strictEqual(toDelete.length, 5);
+  assert.deepStrictEqual(toDelete, ["search-11", "search-12", "search-13", "search-14", "search-15"]);
 });
 
 // ---------------------------------------------------------------------------

@@ -81,8 +81,16 @@ export const resumesApi = {
 };
 
 export const jobsApi = {
-  search: async ({ resumeId, refresh = false }) => {
-    return api.post("/jobs/search", { body: { resumeId, refresh } });
+  search: async ({ resumeId, filters, refresh = false }) => {
+    return api.post("/jobs/search", { body: { resumeId, filters, refresh } });
+  },
+  getLatest: async (resumeId) => {
+    return api.get("/jobs/searches/latest", {
+      params: resumeId ? { resumeId } : {},
+    });
+  },
+  getSearchJobs: async (searchId, params = {}) => {
+    return api.get(`/jobs/searches/${searchId}/jobs`, { params });
   },
   track: async ({ resumeId, jobId }) => {
     return api.post("/jobs/track", { body: { resumeId, jobId } });

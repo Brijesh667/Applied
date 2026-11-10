@@ -13,6 +13,7 @@ export function Button({
   variant = "primary",
   size = "md",
   loading = false,
+  showLabelOnLoading = false,
   disabled = false,
   className = "",
   type = "button",
@@ -69,12 +70,19 @@ export function Button({
       <span ref={rippleRef} className="btn-ripple-container" aria-hidden="true" />
 
       {loading ? (
-        <>
-          <span className="invisible">{children}</span>
-          <span className="absolute inset-0 flex items-center justify-center z-[2]">
+        showLabelOnLoading ? (
+          <span className="relative z-[2] inline-flex items-center gap-2">
             <Spinner size={size === "sm" ? "sm" : "md"} />
+            <span>{children}</span>
           </span>
-        </>
+        ) : (
+          <>
+            <span className="invisible">{children}</span>
+            <span className="absolute inset-0 flex items-center justify-center z-[2]">
+              <Spinner size={size === "sm" ? "sm" : "md"} />
+            </span>
+          </>
+        )
       ) : (
         <span className="relative z-[2] inline-flex items-center">{children}</span>
       )}

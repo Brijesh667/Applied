@@ -1,4 +1,4 @@
-import { JOB_MAX_RESULTS_RETURNED } from "../../config/constants.js";
+import { JOB_STORE_MAX } from "../../config/constants.js";
 
 /**
  * Normalizes URL for deduplication:
@@ -61,7 +61,23 @@ export function isBetterJob(candidate, current) {
     ? new Date(current.postedAt).getTime()
     : -1;
 
-  return candidateDate > currentDate;
+  if (candidateDate !== currentDate) {
+    return candidateDate > currentDate;
+  }
+
+  // When otherwise equal, prefer the one that has an attribution so terms are respected
+  const candidateHasAttribution = Boolean(
+    candidate.attribution && candidate.attribution.name
+  );
+  const currentHasAttribution = Boolean(
+    current.attribution && current.attribution.name
+  );
+
+  if (candidateHasAttribution !== currentHasAttribution) {
+    return candidateHasAttribution;
+  }
+
+  return false;
 }
 
 /**
@@ -120,7 +136,7 @@ export function dedupeJobs(jobs = []) {
     return timeB - timeA;
   });
 
-  return dedupedList.slice(0, JOB_MAX_RESULTS_RETURNED);
+  return dedupedList.slice(0, JOB_STORE_MAX);
 }
 
 export default {

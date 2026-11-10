@@ -155,10 +155,16 @@ resumeSchema.index(
   {
     unique: true,
     partialFilterExpression: { isDefault: true },
+    name: "unique_default_resume_per_user",
   }
 );
 
 const Resume = mongoose.model("Resume", resumeSchema);
+
+// Ensure indexes (including partial unique index on isDefault) are synced
+Resume.init().catch((err) => {
+  console.error("Error initializing Resume indexes:", err.message);
+});
 
 export { resumeSchema, Resume };
 export default Resume;

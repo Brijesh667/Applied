@@ -1,67 +1,73 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Search, RotateCw, AlertCircle, ArrowRight, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowRight } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { usePageTitle } from "../hooks/usePageTitle.js";
 import { useResumes } from "../hooks/useResumes.js";
-import { useJobSearch } from "../hooks/useJobSearch.js";
-import { PageContainer } from "../components/layout/PageContainer.jsx";
-import { PageHeader } from "../components/layout/PageHeader.jsx";
+import {
+  useLatestSearch,
+  useRunJobSearch,
+  useJobResults,
+} from "../hooks/useJobSearch.js";
+import { queryKeys } from "../api/queryKeys.js";
+import {
+  deriveDefaultFilters,
+  parseResultFilters,
+  resultFiltersToParams,
+  resultFiltersToUrlParams,
+  countActiveResultFilters,
+} from "../lib/jobFilters.js";
+import { JOB_PAGE_SIZE } from "../lib/constants.js";
 import { Button } from "../components/ui/Button.jsx";
+import { Button as MovingBorderButton } from "../registry/aceternity-ui/moving-border.jsx";
+import ButtonHoverOutline from "../registry/ui-layouts/btn-hover-outline.jsx";
 import { Select } from "../components/ui/Select.jsx";
 import { EmptyState } from "../components/ui/EmptyState.jsx";
 import { ErrorState } from "../components/ui/ErrorState.jsx";
 import { JobCard } from "../components/jobs/JobCard.jsx";
 import { JobCardSkeleton } from "../components/jobs/JobCardSkeleton.jsx";
+import { JobSearchForm } from "../components/jobs/JobSearchForm.jsx";
+import { ResultFilters } from "../components/jobs/ResultFilters.jsx";
 import { DidYouApplyDialog } from "../components/jobs/DidYouApplyDialog.jsx";
 import { usePendingApply } from "../hooks/usePendingApply.js";
-import { JOB_REFRESH_COOLDOWN_MS } from "../lib/constants.js";
-import { cn } from "../lib/cn.js";
 
 /**
- * Format relative time for updated timestamp.
- */
-function formatRelativeTime(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} ${diffMin === 1 ? "minute" : "minutes"} ago`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
-}
-
-/**
- * Map API error to user-friendly messages.
+ * Map API error to short user-friendly messages.
  */
 function mapJobSearchError(error) {
   const status = error?.status;
   if (status === 400) {
-    return "Invalid search request. Check your resume details and try again.";
+    return error?.message || "Invalid search request. Check your settings and try again.";
   }
   if (status === 404) {
-    return "Resume not found. It may have been deleted.";
+    return "Resume not found.";
   }
   if (status === 429) {
-    return "You've reached the search rate limit. Please try again later.";
+    return "Search limit reached. Please try again later.";
   }
-  if (status === 502) {
-    return "Job search providers are currently unavailable. Please try again in a few minutes.";
+  if (status === 502 || status === 503) {
+    return "Job search providers are unavailable. Try again in a few minutes.";
   }
-  if (status === 503) {
-    return "Job search is not configured yet. Please check back later.";
-  }
-  return error?.message || "Couldn't search for jobs right now. Check your connection and try again.";
+  return error?.message || "Couldn't search for jobs right now.";
 }
 
 export default function Jobs() {
   usePageTitle("Jobs");
+  const queryClient = useQueryClient();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const urlResumeId = searchParams.get("resume") || "";
+
+  // 1. Result Filters from URL (Source of Truth)
+  const resultFilters = useMemo(
+    () => parseResultFilters(searchParams),
+    [searchParams]
+  );
+  const hasActiveResultFilters = useMemo(
+    () => countActiveResultFilters(resultFilters) > 0,
+    [resultFilters]
+  );
 
   // Resumes list query
   const {
@@ -81,47 +87,235 @@ export default function Jobs() {
     }
     if (resumes.length > 0) {
       const defaultResume = resumes.find((r) => r.isDefault);
-      return defaultResume ? defaultResume._id || defaultResume.id : resumes[0]._id || resumes[0].id;
+      return defaultResume
+        ? defaultResume._id || defaultResume.id
+        : resumes[0]._id || resumes[0].id;
     }
     return "";
   }, [urlResumeId, resumes]);
 
-  // Keep URL in sync when default is resolved
+  // Keep URL in sync when active resume is resolved
   useEffect(() => {
     if (activeResumeId && urlResumeId !== activeResumeId) {
-      setSearchParams({ resume: activeResumeId }, { replace: true });
+      setSearchParams(
+        {
+          resume: activeResumeId,
+          ...resultFiltersToUrlParams(resultFilters),
+        },
+        { replace: true }
+      );
     }
-  }, [activeResumeId, urlResumeId, setSearchParams]);
+  }, [activeResumeId, urlResumeId, resultFilters, setSearchParams]);
 
-  const selectedResume = resumes.find((r) => (r._id || r.id) === activeResumeId) || null;
+  const selectedResume =
+    resumes.find((r) => (r._id || r.id) === activeResumeId) || null;
 
-  // Search hook for active resume
+  // 2. Latest unexpired search from server
   const {
-    data: searchData,
-    isLoading: isSearching,
-    isError: isSearchError,
-    error: searchError,
-    search,
-  } = useJobSearch(activeResumeId);
+    data: latestData,
+    isLoading: isLatestLoading,
+    isError: isLatestError,
+    error: latestError,
+    refetch: refetchLatest,
+  } = useLatestSearch(activeResumeId);
 
-  // Client-side sort: "match" (Best match) vs "date" (Newest)
-  const [sortBy, setSortBy] = useState("match");
+  // 3. Mutation for executing fresh search
+  const runSearchMutation = useRunJobSearch();
 
-  // "Did you apply?" Dialog state
-  const [dialogJob, setDialogJob] = useState(null);
+  // Reset mutation state when active resume changes
+  useEffect(() => {
+    runSearchMutation.reset();
+  }, [activeResumeId]);
 
-  // Hook to detect tab returns after clicking Apply
-  usePendingApply({
-    jobs: searchData?.jobs || [],
-    isDialogOpen: Boolean(dialogJob),
-    onTriggerDialog: (job) => setDialogJob(job),
-  });
+  // Seed infinite query cache with page 1 from latestData so zero extra round trips are needed
+  useEffect(() => {
+    if (latestData?.search?.id) {
+      const defaultKey = queryKeys.jobs.results(latestData.search.id, {
+        sort: "best",
+      });
+      if (!queryClient.getQueryData(defaultKey)) {
+        queryClient.setQueryData(defaultKey, {
+          pages: [
+            {
+              jobs: latestData.jobs || [],
+              total: latestData.total ?? (latestData.jobs || []).length,
+              page: latestData.page || 1,
+              limit: latestData.limit || JOB_PAGE_SIZE,
+              hasMore: Boolean(latestData.hasMore),
+              facets: latestData.facets || {},
+              search: latestData.search,
+            },
+          ],
+          pageParams: [1],
+        });
+      }
+    }
+  }, [latestData, queryClient]);
 
-  // Selection change handler
-  const handleSelectResume = (e) => {
-    const nextId = e.target.value;
-    setSearchParams({ resume: nextId });
+  // Form state
+  const [formFilters, setFormFilters] = useState(() =>
+    deriveDefaultFilters(selectedResume)
+  );
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const lastSyncedResumeRef = useRef(null);
+
+  // Synchronize search form filters when latest search loads or resume changes
+  useEffect(() => {
+    if (isLatestLoading) return;
+    if (lastSyncedResumeRef.current === activeResumeId && !latestData) return;
+
+    if (latestData?.search?.filters) {
+      setFormFilters(latestData.search.filters);
+      setIsCollapsed(true);
+      lastSyncedResumeRef.current = activeResumeId;
+    } else if (latestData === null) {
+      setFormFilters(deriveDefaultFilters(selectedResume));
+      setIsCollapsed(false);
+      lastSyncedResumeRef.current = activeResumeId;
+    }
+  }, [activeResumeId, latestData, isLatestLoading, selectedResume]);
+
+  const handleSelectResume = (nextId) => {
+    setSearchParams({ resume: nextId }, { replace: true });
   };
+
+  const handleChangeFormFilter = (field, value) => {
+    setFormFilters((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleResetToDefaults = () => {
+    setFormFilters(deriveDefaultFilters(selectedResume));
+  };
+
+  // Result filter manipulation handlers (URL is source of truth)
+  const handleChangeResultFilter = useCallback(
+    (field, value) => {
+      const nextFilters = {
+        ...resultFilters,
+        [field]: value,
+      };
+      setSearchParams(
+        {
+          resume: activeResumeId,
+          ...resultFiltersToUrlParams(nextFilters),
+        },
+        { replace: true }
+      );
+    },
+    [resultFilters, activeResumeId, setSearchParams]
+  );
+
+  const handleClearResultFilters = useCallback(() => {
+    const cleanParams = { resume: activeResumeId };
+    if (resultFilters.sort === "newest") {
+      cleanParams.sort = "newest";
+    }
+    setSearchParams(cleanParams, { replace: true });
+  }, [activeResumeId, resultFilters.sort, setSearchParams]);
+
+  // Determine current active search object
+  const currentSearch =
+    runSearchMutation.data?.search || latestData?.search || null;
+  const searchId = currentSearch?.id || "";
+
+  // Convert result filters into backend query params
+  const apiParams = useMemo(
+    () => resultFiltersToParams(resultFilters),
+    [resultFilters]
+  );
+
+  // Results infinite query hook (retains previous results during filter/sort transitions)
+  const {
+    data: resultsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    error: resultsError,
+  } = useJobResults(searchId, apiParams);
+
+  // Expired search detection (404 from getSearchJobs)
+  const isSearchExpired = resultsError?.status === 404;
+
+  useEffect(() => {
+    if (isSearchExpired) {
+      setIsCollapsed(false);
+    }
+  }, [isSearchExpired]);
+
+  // 400 error recovery
+  const [filterError400, setFilterError400] = useState(false);
+  useEffect(() => {
+    if (resultsError?.status === 400) {
+      setSearchParams({ resume: activeResumeId }, { replace: true });
+      setFilterError400(true);
+    }
+  }, [resultsError, activeResumeId, setSearchParams]);
+
+  // Aggregate all loaded jobs
+  const allJobs = useMemo(() => {
+    if (!resultsData?.pages) {
+      if (
+        latestData?.search?.id === searchId &&
+        resultFilters.sort === "best" &&
+        !hasActiveResultFilters &&
+        latestData?.jobs
+      ) {
+        return latestData.jobs;
+      }
+      return [];
+    }
+    return resultsData.pages.flatMap((page) => page?.jobs || []);
+  }, [resultsData, latestData, searchId, resultFilters.sort, hasActiveResultFilters]);
+
+  const totalJobs =
+    resultsData?.pages?.[0]?.total ??
+    (!hasActiveResultFilters && latestData?.search?.id === searchId
+      ? latestData?.total
+      : 0) ??
+    allJobs.length;
+
+  // Focus management and screen-reader announcements
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const prevJobCountRef = useRef(allJobs.length);
+  const prevApiParamsRef = useRef(apiParams);
+
+  // Announce newly loaded jobs on "Load more"
+  const handleLoadMore = async () => {
+    prevJobCountRef.current = allJobs.length;
+    await fetchNextPage();
+  };
+
+  useEffect(() => {
+    if (allJobs.length > prevJobCountRef.current && prevJobCountRef.current > 0) {
+      const diff = allJobs.length - prevJobCountRef.current;
+      setLiveAnnouncement(`${diff} more jobs loaded`);
+      const firstNewJob = allJobs[prevJobCountRef.current];
+      if (firstNewJob) {
+        requestAnimationFrame(() => {
+          const cardEl = document.getElementById(`job-card-${firstNewJob.id}`);
+          if (cardEl) {
+            cardEl.focus({ preventScroll: false });
+          }
+        });
+      }
+      prevJobCountRef.current = allJobs.length;
+    }
+  }, [allJobs]);
+
+  // Screen reader filter count announcements (not visible in UI)
+  useEffect(() => {
+    const prevStr = JSON.stringify(prevApiParamsRef.current);
+    const currStr = JSON.stringify(apiParams);
+    if (prevStr !== currStr) {
+      prevApiParamsRef.current = apiParams;
+      setLiveAnnouncement(
+        `${totalJobs} ${totalJobs === 1 ? "job matches" : "jobs match"}`
+      );
+    }
+  }, [apiParams, totalJobs]);
 
   // Pre-condition state evaluations
   const hasSkills = (selectedResume?.skills?.length ?? 0) > 0;
@@ -129,54 +323,82 @@ export default function Jobs() {
   const isPending = selectedResume?.parseStatus === "pending";
   const hasSufficientCriteria = hasSkills || hasRoles;
 
-  const canSearch = Boolean(selectedResume && !isPending && hasSufficientCriteria && !isSearching);
+  const isSearching = runSearchMutation.isPending;
 
+  // Execute search (new or refresh)
   const handleSearch = async (refresh = false) => {
-    if (!canSearch && !refresh) return;
+    if (!selectedResume || isSearching) return;
+    setSearchParams({ resume: activeResumeId }, { replace: true });
+    setFilterError400(false);
+    setIsCollapsed(true);
     try {
-      await search({ refresh });
+      const res = await runSearchMutation.mutateAsync({
+        resumeId: activeResumeId,
+        filters: formFilters,
+        refresh,
+      });
+      if (res?.search?.filters) {
+        setFormFilters(res.search.filters);
+      }
+      if (refresh && res?.cached) {
+        toast("Results are still fresh");
+      }
     } catch {
-      // Error is captured in mutation state
+      // Re-open form if search failed
+      setIsCollapsed(false);
     }
   };
 
-  // Sorted job results
-  const sortedJobs = useMemo(() => {
-    if (!searchData?.jobs) return [];
-    const list = [...searchData.jobs];
-    if (sortBy === "date") {
-      return list.sort((a, b) => {
-        const timeA = a.postedAt ? new Date(a.postedAt).getTime() : 0;
-        const timeB = b.postedAt ? new Date(b.postedAt).getTime() : 0;
-        return timeB - timeA;
-      });
-    }
-    // Default: Best match (descending score)
-    return list.sort((a, b) => {
-      const scoreA = typeof a.matchScore === "number" ? a.matchScore : 0;
-      const scoreB = typeof b.matchScore === "number" ? b.matchScore : 0;
-      return scoreB - scoreA;
-    });
-  }, [searchData?.jobs, sortBy]);
+  // "Did you apply?" Dialog state
+  const [dialogJob, setDialogJob] = useState(null);
 
-  // Check cooldown status
-  const isWithinCooldown =
-    Boolean(searchData?.cached) &&
-    Boolean(searchData?.generatedAt) &&
-    Date.now() - new Date(searchData.generatedAt).getTime() < JOB_REFRESH_COOLDOWN_MS;
+  usePendingApply({
+    jobs: allJobs,
+    isDialogOpen: Boolean(dialogJob),
+    onTriggerDialog: (job) => setDialogJob(job),
+  });
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Jobs"
-        description="Find jobs that match one of your resumes."
-      />
+    <div className="max-w-[1120px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
+      {/* Header row: Title on left; compact resume select on right when search exists */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-5">
+        <h1 className="text-[26px] sm:text-[28px] font-bold text-ink tracking-tight">
+          Jobs
+        </h1>
+
+        {Boolean(currentSearch) && resumes.length > 0 && (
+          <div className="w-full sm:w-auto sm:min-w-[200px] max-w-xs">
+            <Select
+              value={activeResumeId}
+              onChange={(e) => handleSelectResume(e.target.value)}
+              disabled={isSearching}
+              aria-label="Active resume"
+              className="h-9 text-[13px]"
+            >
+              {resumes.map((resume) => {
+                const id = resume._id || resume.id;
+                const label = resume.label || resume.fileName || "Untitled resume";
+                return (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                );
+              })}
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {/* Screen reader live region */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveAnnouncement}
+      </div>
 
       {/* Loading resumes skeleton */}
       {isResumesLoading && (
         <div className="space-y-4">
-          <div className="h-10 w-64 bg-sunken rounded-[8px] animate-pulse" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+          <div className="h-10 w-64 bg-sunken rounded-lg animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             <JobCardSkeleton />
             <JobCardSkeleton />
           </div>
@@ -198,108 +420,120 @@ export default function Jobs() {
           title="No resumes yet"
           description="Upload a resume first to find matching jobs."
           action={
-            <Button
-              variant="primary"
-              onClick={() => {}}
-              className="mt-2"
+            <MovingBorderButton
+              as={Link}
+              to="/resumes"
+              duration={3000}
+              containerClassName="w-44 h-9 inline-flex"
+              className="text-sm font-medium text-white gap-2"
             >
-              <Link to="/resumes" className="inline-flex items-center gap-1.5 text-inherit">
-                <span>Go to Resumes</span>
-                <ArrowRight className="w-4 h-4" aria-hidden="true" />
-              </Link>
-            </Button>
+              <span>Go to Resumes</span>
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </MovingBorderButton>
           }
         />
       )}
 
-      {/* Normal View: Resumes exist */}
+      {/* Main view: Resumes exist */}
       {!isResumesLoading && !isResumesError && resumes.length > 0 && (
-        <div className="space-y-6">
-          {/* Controls Bar */}
-          <div className="p-4 sm:p-5 rounded-[12px] bg-surface border border-rule">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
-              {/* Resume Selector */}
-              <div className="flex-1 min-w-[200px]">
-                <label
-                  htmlFor="resume-select"
-                  className="block text-[13px] leading-[18px] font-medium text-ink-soft mb-1.5"
-                >
-                  Select resume
-                </label>
-                <Select
-                  id="resume-select"
-                  value={activeResumeId}
-                  onChange={handleSelectResume}
-                  disabled={isSearching}
-                  aria-label="Select resume"
-                >
-                  {resumes.map((resume) => {
-                    const id = resume._id || resume.id;
-                    const label = resume.label || resume.fileName || "Untitled resume";
-                    const defaultMarker = resume.isDefault ? " (Default)" : "";
-                    return (
-                      <option key={id} value={id}>
-                        {label}
-                        {defaultMarker}
-                      </option>
-                    );
-                  })}
-                </Select>
-              </div>
-
-              {/* Primary Search Button */}
-              <div className="shrink-0">
-                <Button
-                  variant="primary"
-                  size="md"
-                  disabled={!canSearch}
-                  loading={isSearching}
-                  onClick={() => handleSearch(false)}
-                  className="w-full sm:w-auto"
-                >
-                  <Search className="w-4 h-4 mr-1.5" aria-hidden="true" />
-                  <span>Find jobs</span>
-                </Button>
-              </div>
+        <div className="space-y-5">
+          {/* Pre-condition banner: Resume still being parsed */}
+          {isPending && (
+            <div
+              role="status"
+              className="p-3 rounded-lg bg-sunken/60 border border-rule text-[13px] leading-[18px] text-ink-soft inline-flex items-center gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
+              <span>Resume is being read. Try again shortly.</span>
             </div>
+          )}
 
-            {/* Inline warning for pending parse */}
-            {isPending && (
-              <div
-                role="status"
-                className="mt-3 text-[13px] leading-[18px] text-ink-soft inline-flex items-center gap-1.5"
+          {/* Pre-condition banner: Empty skills & roles */}
+          {!isPending && !hasSufficientCriteria && (
+            <div
+              role="status"
+              className="p-3 rounded-lg bg-sunken/60 border border-rule text-[13px] leading-[18px] text-ink-soft flex items-center flex-wrap gap-1"
+            >
+              <AlertCircle className="w-4 h-4 text-ink-soft shrink-0" aria-hidden="true" />
+              <span>Add skills or roles to this resume to find jobs.</span>
+              <Link
+                to="/resumes"
+                className="text-primary hover:underline font-medium inline-flex items-center gap-0.5 ml-1"
               >
-                <AlertCircle className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
-                <span>Resume is still being parsed. Please wait a moment.</span>
-              </div>
-            )}
+                <span>Edit in Resumes</span>
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+          )}
 
-            {/* Inline warning for empty skills & roles */}
-            {!isPending && !hasSufficientCriteria && (
-              <div
-                role="status"
-                className="mt-3 text-[13px] leading-[18px] text-ink-soft flex items-center flex-wrap gap-1"
+          {/* Search Form Card (Expands when needed, collapses into slim summary bar) */}
+          <JobSearchForm
+            resumes={resumes}
+            activeResumeId={activeResumeId}
+            hasSearch={Boolean(currentSearch)}
+            onSelectResume={handleSelectResume}
+            filters={formFilters}
+            onChangeFilter={handleChangeFormFilter}
+            onSubmit={() => handleSearch(false)}
+            onResetToDefaults={handleResetToDefaults}
+            onSearchAgain={() => handleSearch(true)}
+            isSearching={isSearching}
+            isCollapsed={isCollapsed}
+            onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
+            disabled={!hasSufficientCriteria || isPending}
+            serverError={
+              runSearchMutation.isError
+                ? mapJobSearchError(runSearchMutation.error)
+                : null
+            }
+          />
+
+          {/* Quiet 400 error recovery notice */}
+          {filterError400 && (
+            <div
+              role="status"
+              className="px-3.5 py-2.5 rounded-lg bg-danger/10 border border-danger/30 text-danger text-[13px] leading-[18px] flex items-center justify-between gap-2"
+            >
+              <span>Filters have been reset.</span>
+              <button
+                type="button"
+                onClick={() => setFilterError400(false)}
+                className="text-danger hover:underline font-medium text-[12px] p-0.5 cursor-pointer"
               >
-                <AlertCircle className="w-4 h-4 text-ink-soft shrink-0" aria-hidden="true" />
-                <span>Add at least one skill or role title to this resume to search for jobs.</span>
-                <Link
-                  to="/resumes"
-                  className="text-primary hover:underline font-medium inline-flex items-center gap-0.5 ml-1"
-                >
-                  <span>Edit in Resumes</span>
-                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                </Link>
-              </div>
-            )}
-          </div>
+                Dismiss
+              </button>
+            </div>
+          )}
 
-          {/* Searching Announcement & Skeletons */}
+          {/* Inline alert when stored search expired */}
+          {isSearchExpired && (
+            <div
+              role="alert"
+              className="p-4 rounded-xl bg-danger/10 border border-danger/30 text-ink space-y-2"
+            >
+              <div className="flex items-center gap-2 text-danger font-medium text-[14px]">
+                <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span>This search has expired.</span>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={isSearching}
+                showLabelOnLoading={true}
+                onClick={() => handleSearch(false)}
+              >
+                <span>Search again</span>
+              </Button>
+            </div>
+          )}
+
+          {/* Skeletons while actively searching */}
           {isSearching && (
             <div>
               <p className="sr-only" aria-live="polite">
-                Searching jobs for this resume. This can take up to a minute.
+                Searching
               </p>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <JobCardSkeleton />
                 <JobCardSkeleton />
                 <JobCardSkeleton />
@@ -308,128 +542,100 @@ export default function Jobs() {
             </div>
           )}
 
-          {/* Search Error State */}
-          {!isSearching && isSearchError && (
+          {/* Initial loading of latest search */}
+          {!isSearching && isLatestLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <JobCardSkeleton />
+              <JobCardSkeleton />
+            </div>
+          )}
+
+          {/* Error loading latest search (other than 404 which is handled gracefully) */}
+          {!isSearching && !isLatestLoading && isLatestError && (
             <ErrorState
-              title="Couldn't find jobs"
-              message={mapJobSearchError(searchError)}
-              onRetry={() => handleSearch(false)}
+              title="Couldn't load search"
+              message={latestError?.message || "There was a problem loading your saved search."}
+              onRetry={refetchLatest}
             />
           )}
 
-          {/* Search Results */}
-          {!isSearching && !isSearchError && searchData && (
-            <div className="space-y-4">
-              {/* Results Subheader */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-rule">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[18px] leading-[24px] font-semibold text-ink">
-                      {searchData.total ?? sortedJobs.length}{" "}
-                      {searchData.total === 1 ? "job" : "jobs"} for{" "}
-                      {selectedResume?.label || "this resume"}
-                    </h2>
-                  </div>
-
-                  {/* Relative update time and cooldown note */}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-[18px] text-ink-soft mt-0.5">
-                    {searchData.generatedAt && (
-                      <span className="tabular-nums">
-                        Updated {formatRelativeTime(searchData.generatedAt)}
-                      </span>
-                    )}
-
-                    {isWithinCooldown && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span>These results are less than an hour old, so we kept them.</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right side: Sort toggle & Search again */}
-                <div className="flex items-center gap-2.5 sm:self-auto self-start">
-                  {/* Client-side Sort Toggle */}
-                  <div className="inline-flex items-center p-0.5 rounded-[8px] bg-sunken border border-rule/60 text-[13px]">
-                    <button
-                      type="button"
-                      onClick={() => setSortBy("match")}
-                      className={cn(
-                        "px-2.5 py-1 rounded-[6px] font-medium transition-colors cursor-pointer select-none",
-                        sortBy === "match"
-                          ? "bg-surface text-ink shadow-xs"
-                          : "text-ink-soft hover:text-ink"
-                      )}
-                    >
-                      Best match
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSortBy("date")}
-                      className={cn(
-                        "px-2.5 py-1 rounded-[6px] font-medium transition-colors cursor-pointer select-none",
-                        sortBy === "date"
-                          ? "bg-surface text-ink shadow-xs"
-                          : "text-ink-soft hover:text-ink"
-                      )}
-                    >
-                      Newest
-                    </button>
-                  </div>
-
-                  {/* Refresh / Search again button */}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleSearch(true)}
-                    disabled={isSearching}
-                    title="Refresh results from providers"
-                  >
-                    <RotateCw className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
-                    <span>Search again</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Quiet note when ranked locally */}
-              {searchData.rankedBy === "local" && (
-                <div className="text-[13px] leading-[18px] text-ink-soft flex items-center gap-1.5 px-3 py-2 rounded-[8px] bg-sunken/40 border border-rule/50">
-                  <Sparkles className="w-4 h-4 text-ink-soft shrink-0" aria-hidden="true" />
-                  <span>Scores are based on how many of your skills appear in each job.</span>
-                </div>
-              )}
-
-              {/* Empty results view */}
-              {sortedJobs.length === 0 ? (
-                <EmptyState
-                  title="No jobs found"
-                  description="We couldn't find any openings matching this resume's skills or roles. Try updating your resume with more skills."
-                  action={
-                    <Button variant="secondary" size="sm" className="mt-2">
-                      <Link to="/resumes" className="inline-flex items-center gap-1 text-inherit">
-                        <span>Update resume</span>
-                        <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                      </Link>
-                    </Button>
-                  }
+          {/* Search results display with ResultFilters */}
+          {!isSearching &&
+            !isLatestLoading &&
+            !isSearchExpired &&
+            currentSearch && (
+              <div className="space-y-4">
+                {/* Result Filters Toolbar */}
+                <ResultFilters
+                  filters={resultFilters}
+                  onChangeFilter={handleChangeResultFilter}
+                  onClearFilters={handleClearResultFilters}
                 />
-              ) : (
-                /* 2-column desktop, 1-column mobile Grid */
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {sortedJobs.map((job) => (
-                    <JobCard
-                      key={job.id}
-                      job={job}
-                      resumeId={activeResumeId}
-                      resumeSkills={selectedResume?.skills}
-                      onOpenTrackDialog={(targetJob) => setDialogJob(targetJob)}
+
+                {/* Empty results / No matching filters view */}
+                {allJobs.length === 0 ? (
+                  hasActiveResultFilters ? (
+                    <EmptyState
+                      title="No jobs match"
+                      action={
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleClearResultFilters}
+                          className="mt-2"
+                        >
+                          <span>Clear filters</span>
+                        </Button>
+                      }
                     />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  ) : (
+                    <EmptyState
+                      title="No jobs found"
+                      action={
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setIsCollapsed(false)}
+                          className="mt-2"
+                        >
+                          <span>Edit search</span>
+                        </Button>
+                      }
+                    />
+                  )
+                ) : (
+                  /* Job Cards Grid (1 col below 768px, 2 cols from 768px) */
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {allJobs.map((job) => (
+                        <JobCard
+                          key={job.id}
+                          job={job}
+                          resumeId={activeResumeId}
+                          onOpenTrackDialog={(targetJob) =>
+                            setDialogJob(targetJob)
+                          }
+                        />
+                      ))}
+                    </div>
+
+                    {/* Centered Load more button (no counts, hides when no next page) */}
+                    {hasNextPage && (
+                      <div className="pt-2 flex justify-center">
+                        <ButtonHoverOutline
+                          onClick={handleLoadMore}
+                          disabled={isFetchingNextPage}
+                          loading={isFetchingNextPage}
+                          className="min-w-[140px]"
+                        >
+                          Load more
+                        </ButtonHoverOutline>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
         </div>
       )}
 
@@ -440,6 +646,6 @@ export default function Jobs() {
         resumeId={activeResumeId}
         onClose={() => setDialogJob(null)}
       />
-    </PageContainer>
+    </div>
   );
 }

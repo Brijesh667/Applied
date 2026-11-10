@@ -16,10 +16,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 const app = express();
 
 app.set("query parser", "extended");
-
-if (config.isProduction) {
-  app.set("trust proxy", config.trustProxyHops);
-}
+app.set("trust proxy", config.trustProxy);
 
 // Middlewares
 app.use(helmet());

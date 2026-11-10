@@ -295,3 +295,48 @@ Wordmark "Applied" in `ink`, bold, tight letter-spacing (`font-bold tracking-tig
   - Landing page behind remains full color, sharp, and non-interactive (`inert`).
   - Esc closes, outside click closes, focus returns to opener, focus trapped, 0px layout shift via scrollbar compensation.
 
+## Job Search Page: Design, Card Anatomy & Toolbar (Phase 3 Redesign)
+
+Applied's Jobs page (`/jobs`) is an executive command center for matching jobs against resume profiles. It enforces absolute minimalism: **show only text the user needs to act**. No filler copy, no explanatory helper paragraphs, no counts that do not assist decisions.
+
+### Card Anatomy (`JobCard`)
+Flat resting surface (`bg-surface`, 1px `border-rule`, radius `12px`, padding `16px`), standard card spotlight effect on hover:
+1. **Header Row:**
+   - **Job Title:** Semibold `15px` (`leading-[20px]`, `text-ink`), line-clamped to 2 lines (`line-clamp-2`), occupies the left column.
+   - **MatchRing (`MatchRing`):** Fixed `36px` circular progress indicator in the top right. Uses thin `ink` stroke with SVG `strokeDashoffset` representing the match percentage and tabular percentage number inside (`text-[10px] font-semibold tabular-nums text-ink`). Fully accessible via `aria-label="<score> percent match"`.
+2. **Company & Location Line:** Single line below title, text `13px` `text-ink-soft`. Company name bolded/medium, middle dot, location, and an optional small neutral `Remote` chip when `job.remote === true`. Truncated with ellipsis.
+3. **Meta Row:** Muted `12px` row separated by middle dots (`·`):
+   - Formatted compensation (e.g., `₹ 24,00,000 / yr` or raw `salaryText` such as `$120,000 – $140,000 USD`) when available.
+   - Employment type (e.g., `Full-time`, `Contract`, `Internship`) when known.
+   - Calendar-day posted recency (e.g., `Today`, `Yesterday`, `3d ago`).
+   - Source attribution link (e.g., `via Himalayas` or `via Remote OK`) opening source in external tab (`rel="noopener noreferrer"`).
+4. **Match Reason:** One single truncated line of factual fit without labels (e.g., `Matches React, TypeScript, and component architecture.`).
+5. **Snippet:** Plain-text job excerpt clamped to 3 lines (`line-clamp-3`, `text-[13px] leading-[18px] text-ink-soft`) without expansion toggles.
+6. **Footer:**
+   - **Primary Action:** "Apply" button (`variant="primary" size="sm"`) opening external URL securely in a new tab. Hidden if apply URL is invalid.
+   - **Tracking Action:** "Track" secondary button (`variant="secondary" size="sm"`) creating an application in one click. Once tracked, switches to quiet "Tracked" status with checkmark icon and a "View" link navigating to the application detail.
+
+### Collapsed Summary Bar
+When a search has been executed or restored from the server:
+- Slim single row (`px-4 py-2.5 rounded-[12px] bg-surface border border-rule`).
+- Neutral summary chips array generated from active filters (e.g., `["Internship", "Fresher", "Full-Stack Developer", "Bengaluru", "Last 30 days"]`).
+- Right-aligned actions: quiet "Edit" button (`variant="ghost" size="sm"`) to expand the form, and "Search again" refresh button.
+
+### Result Filters Toolbar (`ResultFilters`)
+- **Desktop (md and up):** Single clean toolbar row:
+  1. Text search input (grows to fill available space, placeholder "Search title or company", clear button).
+  2. Remote 3-way segmented control ("All", "Remote", "On-site").
+  3. Pay listed toggle chip ("Pay listed").
+  4. Sort select dropdown ("Best match", "Newest").
+  5. Clear button: quiet text button ("Clear") visible only when filters are active.
+- **Mobile (< md):** Compact row with text search, Sort select, "Filters" button with active badge, and Clear button. Opens a clean bottom-sheet dialog containing the same controls with a "Show jobs" button.
+
+### Copy Rules & Minimalism
+- **Sentence case** across all text; no uppercase text transforms.
+- **Zero exclamation marks** and **zero emojis** in UI copy.
+- No helper sentences explaining 24h caching, how scores work, or unlisted pay policies.
+- No redundant counts at top or bottom ("Showing X of Y").
+- Precondition states use a single short, direct line.
+
+
+

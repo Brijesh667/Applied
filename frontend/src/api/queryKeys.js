@@ -14,7 +14,8 @@ export const queryKeys = {
   },
   jobs: {
     all: ["jobs"],
-    search: (resumeId) => ["jobs", "search", resumeId],
+    latest: (resumeId) => ["jobs", "latest", resumeId],
+    results: (searchId, params = {}) => ["jobs", "results", searchId, params],
   },
   stats: ["stats"],
 };

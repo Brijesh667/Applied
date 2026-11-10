@@ -1,8 +1,7 @@
 import config from "../../config/env.js";
 import {
   JOB_PROVIDER_TIMEOUT_MS,
-  JOB_ADZUNA_MAX_REQUESTS_PER_SEARCH,
-  JOB_RESULTS_PER_REQUEST,
+  JOB_ADZUNA_RESULTS_PER_REQUEST,
   JOB_MAX_AGE_DAYS,
 } from "../../config/constants.js";
 
@@ -12,7 +11,7 @@ const ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api/jobs/in/search/1";
  * Fetch raw job listings from Adzuna India API.
  * Never logs full request URLs (app_key is in query string).
  *
- * @param {Array<{ what: string, where?: string }>} queries
+ * @param {Array<{ what: string, where?: string, jobType?: string, postedWithinDays?: number, minPay?: number }>} queries
  * @returns {Promise<{ jobs: Array<Object>, status: "ok" | "failed" | "quota" | "skipped" }>}
  */
 export async function searchJobs(queries = []) {
@@ -20,7 +19,8 @@ export async function searchJobs(queries = []) {
     return { jobs: [], status: "skipped" };
   }
 
-  const activeQueries = queries.slice(0, JOB_ADZUNA_MAX_REQUESTS_PER_SEARCH);
+  // Exactly one request per search
+  const activeQueries = queries.slice(0, 1);
   if (activeQueries.length === 0) {
     return { jobs: [], status: "ok" };
   }
@@ -38,15 +38,33 @@ export async function searchJobs(queries = []) {
       const url = new URL(ADZUNA_BASE_URL);
       url.searchParams.set("app_id", config.adzunaAppId);
       url.searchParams.set("app_key", config.adzunaAppKey);
-      url.searchParams.set("results_per_page", String(JOB_RESULTS_PER_REQUEST));
-      url.searchParams.set("max_days_old", String(JOB_MAX_AGE_DAYS));
+      url.searchParams.set(
+        "results_per_page",
+        String(JOB_ADZUNA_RESULTS_PER_REQUEST)
+      );
+      url.searchParams.set(
+        "max_days_old",
+        String(q.postedWithinDays || JOB_MAX_AGE_DAYS)
+      );
       url.searchParams.set("content-type", "application/json");
 
-      if (q.what) {
-        url.searchParams.set("what", q.what);
+      let what = q.what || "";
+      if (q.jobType === "internship" && !/\bintern/i.test(what)) {
+        what = `${what} intern`.trim();
+      }
+      if (what) {
+        url.searchParams.set("what", what);
       }
       if (q.where) {
         url.searchParams.set("where", q.where);
+      }
+      if (typeof q.minPay === "number" && q.minPay > 0) {
+        url.searchParams.set("salary_min", String(Math.round(q.minPay)));
+      }
+      if (q.jobType === "fulltime") {
+        url.searchParams.set("full_time", "1");
+      } else if (q.jobType === "parttime") {
+        url.searchParams.set("part_time", "1");
       }
 
       const res = await fetch(url.toString(), {

@@ -75,7 +75,11 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const status = response.status;
-    const message = data?.message || "Something went wrong";
+    const message =
+      data?.message ||
+      (status === 404
+        ? "Backend server is not running on port 5000 or API route was not found."
+        : "Something went wrong");
     const fieldErrors = data?.errors || null;
 
     const isExempt401Path =

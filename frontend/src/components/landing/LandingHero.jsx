@@ -11,6 +11,7 @@
  * - Animated fade-up on scroll reveal.
  */
 import React, { useMemo } from "react";
+import LightRays from "@/registry/react-bits/LightRays";
 import { GradientButton } from "../ui/GradientButton.jsx";
 import { ReplyTypeBadge } from "../ui/ReplyTypeBadge.jsx";
 import { DueChip } from "../ui/DueChip.jsx";
@@ -189,12 +190,32 @@ function HeroRightPreview() {
 export function LandingHero({ onOpenRegister }) {
   const { ref: revealRef, isVisible } = useScrollReveal({ threshold: 0.05 });
 
+  // Memoize LightRays background so it never re-renders or degrades performance on parent updates
+  const memoizedLightRays = useMemo(
+    () => (
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <LightRays
+          raysOrigin="top-center"
+          raysColor="#ffffff"
+          raysSpeed={1}
+          lightSpread={1}
+          rayLength={2}
+          pulsating={false}
+          followMouse={true}
+          mouseInfluence={0.15}
+        />
+      </div>
+    ),
+    []
+  );
+
   return (
-    <section className="relative hero-radial-glow landing-section">
+    <section className="relative hero-radial-glow landing-section overflow-hidden">
+      {memoizedLightRays}
       <div
         ref={revealRef}
         className={cn(
-          "max-w-[1120px] mx-auto px-4 sm:px-6 md:px-8 transition-all duration-[250ms] ease-out motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100",
+          "relative z-10 max-w-[1120px] mx-auto px-4 sm:px-6 md:px-8 transition-all duration-[250ms] ease-out motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100",
           isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2.5"
         )}
       >

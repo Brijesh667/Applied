@@ -1,4 +1,7 @@
-import { JOB_RANK_CANDIDATES } from "../../config/constants.js";
+import {
+  JOB_RANK_CANDIDATES,
+  JOB_STORE_MAX,
+} from "../../config/constants.js";
 import { scoreJobLocally } from "./localScore.js";
 import { rankJobsWithAi } from "./jobRankAi.js";
 import { isAiConfigured, classifyAiError } from "../ai/clients.js";
@@ -25,6 +28,8 @@ function compareJobs(a, b) {
 /**
  * Evaluates candidate job postings using local heuristic scoring, selects top candidates,
  * attempts one batched AI evaluation if available, and gracefully falls back to local scoring.
+ * Stores up to JOB_STORE_MAX jobs, evaluates top JOB_RANK_CANDIDATES with AI,
+ * and assigns a stable 1-based rank integer to each job.
  *
  * @param {Array<Object>} rawJobs - Deduplicated normalized job listings
  * @param {Object} profile - Candidate profile ({ roleTitles, skills, experienceYears, locationPreference })
@@ -51,10 +56,10 @@ export async function rankAndMergeJobs(rawJobs, profile, options = {}) {
   // Sort by local score desc, ties by postedAt desc
   locallyScored.sort(compareJobs);
 
-  // 2. Select top candidate jobs
-  const candidates = locallyScored.slice(0, JOB_RANK_CANDIDATES);
+  // Keep up to JOB_STORE_MAX (150)
+  const storedJobs = locallyScored.slice(0, JOB_STORE_MAX);
 
-  if (candidates.length === 0) {
+  if (storedJobs.length === 0) {
     return {
       jobs: [],
       rankedBy: "local",
@@ -62,24 +67,31 @@ export async function rankAndMergeJobs(rawJobs, profile, options = {}) {
     };
   }
 
-  // 3. Check if AI provider has credentials configured
+  // Top 25 candidates for AI ranking
+  const aiCandidates = storedJobs.slice(0, JOB_RANK_CANDIDATES);
+  const remainingJobs = storedJobs.slice(JOB_RANK_CANDIDATES);
+
+  // 2. Check if AI provider has credentials configured
   if (!checkConfigured()) {
+    storedJobs.forEach((job, index) => {
+      job.rank = index + 1;
+    });
     return {
-      jobs: candidates,
+      jobs: storedJobs,
       rankedBy: "local",
       rankStatus: "unavailable",
     };
   }
 
-  // 4. Attempt one batched AI evaluation
+  // 3. Attempt one batched AI evaluation on top candidates
   let rankedBy = "local";
   let rankStatus = "failed";
 
   try {
-    const aiScores = await ranker(profile, candidates);
+    const aiScores = await ranker(profile, aiCandidates);
 
     let aiMatchCount = 0;
-    for (const job of candidates) {
+    for (const job of aiCandidates) {
       const match = aiScores ? aiScores[job.id] : null;
       if (match && typeof match.score === "number") {
         job.matchScore = match.score;
@@ -105,11 +117,24 @@ export async function rankAndMergeJobs(rawJobs, profile, options = {}) {
     // All jobs retain their local score and reason; search never fails due to ranking
   }
 
-  // 5. Final sort by matchScore desc, ties by postedAt desc
-  candidates.sort(compareJobs);
+  // 4. Final ordering: AI-scored jobs first (by AI score desc), then remaining jobs by local score desc.
+  // If ranking was local only, all jobs by local score.
+  let finalJobs;
+  if (rankedBy === "ai") {
+    aiCandidates.sort(compareJobs);
+    finalJobs = [...aiCandidates, ...remainingJobs];
+  } else {
+    storedJobs.sort(compareJobs);
+    finalJobs = storedJobs;
+  }
+
+  // 5. Assign stable 1-based rank integer to each stored job
+  finalJobs.forEach((job, index) => {
+    job.rank = index + 1;
+  });
 
   return {
-    jobs: candidates,
+    jobs: finalJobs,
     rankedBy,
     rankStatus,
   };

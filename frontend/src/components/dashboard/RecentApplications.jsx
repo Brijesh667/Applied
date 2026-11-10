@@ -15,6 +15,7 @@ import { queryKeys } from "../../api/queryKeys.js";
 import { useCardFx } from "../../hooks/useCardFx.js";
 import { StatusBadge } from "../ui/StatusBadge.jsx";
 import { Skeleton } from "../ui/Skeleton.jsx";
+import { ShimmerButton } from "../../registry/buttons/shimmer-button.jsx";
 import { cn } from "../../lib/cn.js";
 
 export function RecentApplications({ className = "" }) {
@@ -84,9 +85,11 @@ export function RecentApplications({ className = "" }) {
           </p>
           <Link
             to="/applications/new"
-            className="inline-flex items-center justify-center font-medium transition-colors duration-120 rounded-[8px] cursor-pointer bg-ink text-paper hover:opacity-90 h-9 px-4 text-[14px] leading-[20px]"
+            className="inline-flex"
           >
-            Add application
+            <ShimmerButton className="shadow-lg h-9 px-4 text-sm font-medium">
+              <span className="text-sm font-medium text-white">Add application</span>
+            </ShimmerButton>
           </Link>
         </div>
       ) : (

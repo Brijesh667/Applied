@@ -36,7 +36,7 @@ const GENERIC_ROLE_WORDS = new Set([
 ]);
 
 // Level fit keyword dictionaries
-const ENTRY_LEVEL_WORDS = [
+export const ENTRY_LEVEL_WORDS = [
   "intern",
   "internship",
   "trainee",
@@ -47,7 +47,7 @@ const ENTRY_LEVEL_WORDS = [
   "apprentice",
 ];
 
-const SENIOR_LEVEL_WORDS = [
+export const SENIOR_LEVEL_WORDS = [
   "senior",
   "sr",
   "sr.",
@@ -61,7 +61,7 @@ const SENIOR_LEVEL_WORDS = [
 ];
 
 // Patterns indicating high years of experience requirements in text
-const SENIOR_EXP_PATTERN = /\b([5-9]|\d{2,})\+?\s*years?\b/i;
+export const SENIOR_EXP_PATTERN = /\b([5-9]|\d{2,})\+?\s*years?\b/i;
 
 /**
  * Escapes regex special characters in a string.

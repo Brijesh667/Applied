@@ -7,8 +7,9 @@ let server;
 
 const startServer = async () => {
   await connectDB();
-  server = app.listen(config.port, () => {
-    console.log(`Server running on port ${config.port}`);
+  server = app.listen(config.port, "0.0.0.0", () => {
+    console.log(`Server running on port ${config.port} (${config.nodeEnv} mode)`);
+    console.log(`Trust proxy: ${config.trustProxy} hop(s)`);
   });
 };
 

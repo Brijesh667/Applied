@@ -45,7 +45,22 @@ export async function searchJobs(queries = []) {
       url.searchParams.set("page", "1");
       url.searchParams.set("num_pages", "1");
       url.searchParams.set("country", "in");
-      url.searchParams.set("date_posted", "month");
+
+      const datePosted =
+        q.postedWithinDays === 7 ? "week" : "month";
+      url.searchParams.set("date_posted", datePosted);
+
+      if (q.remote === "only" || q.isRemote) {
+        url.searchParams.set("remote_jobs_only", "true");
+      }
+
+      if (q.jobType === "internship") {
+        url.searchParams.set("employment_types", "INTERN");
+      } else if (q.jobType === "fulltime") {
+        url.searchParams.set("employment_types", "FULLTIME");
+      } else if (q.jobType === "parttime") {
+        url.searchParams.set("employment_types", "PARTTIME");
+      }
 
       const res = await fetch(url.toString(), {
         signal: controller.signal,

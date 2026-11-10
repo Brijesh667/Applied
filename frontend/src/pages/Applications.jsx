@@ -18,7 +18,8 @@ import {
   ApplicationCardSkeleton,
 } from "../components/applications/ApplicationCard.jsx";
 import { Button } from "../components/ui/Button.jsx";
-import { Spinner } from "../components/ui/Spinner.jsx";
+import { ShimmerButton } from "../registry/buttons/shimmer-button.jsx";
+import ButtonHoverOutline from "../registry/ui-layouts/btn-hover-outline.jsx";
 import { EmptyState } from "../components/ui/EmptyState.jsx";
 import { ErrorState } from "../components/ui/ErrorState.jsx";
 import { cn } from "../lib/cn.js";
@@ -203,9 +204,9 @@ export default function Applications() {
               description="Add the first one to start your log."
               action={
                 <Link to="/applications/new">
-                  <Button variant="primary" size="sm">
-                    Add application
-                  </Button>
+                  <ShimmerButton className="shadow-lg h-9 px-4 text-sm font-medium">
+                    <span className="text-sm font-medium text-white">Add application</span>
+                  </ShimmerButton>
                 </Link>
               }
             />
@@ -251,22 +252,14 @@ export default function Applications() {
                     : "opacity-100"
                 )}
               >
-                <Button
-                  variant="secondary"
-                  size="md"
+                <ButtonHoverOutline
                   onClick={handleLoadMore}
                   disabled={isFetchingNextPage}
-                  className="w-36 group transition-all duration-200 ease-out hover:-translate-y-0.5 active:scale-[0.98]"
+                  loading={isFetchingNextPage}
+                  className="min-w-36"
                 >
-                  {isFetchingNextPage ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner size="sm" />
-                      <span>Loading</span>
-                    </span>
-                  ) : (
-                    <span>Load more</span>
-                  )}
-                </Button>
+                  Load more
+                </ButtonHoverOutline>
 
                 {loadMoreError && (
                   <div className="flex items-center gap-2 text-[14px] text-danger mt-1">

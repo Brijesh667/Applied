@@ -5,7 +5,7 @@ import { queryKeys } from "../api/queryKeys.js";
 /**
  * Custom hook to track a job posting into an Application.
  * Handles 201 (created) and 409 (already tracked conflict) identically by updating
- * the React Query search cache for the resume with trackedApplicationId.
+ * all cached pages of jobs.results and jobs.latest with trackedApplicationId.
  */
 export function useTrackJob() {
   const queryClient = useQueryClient();
@@ -37,22 +37,45 @@ export function useTrackJob() {
     },
     retry: false,
     onSuccess: (result) => {
-      const { resumeId, jobId, applicationId } = result;
+      const { jobId, applicationId } = result;
 
-      if (resumeId && jobId && applicationId) {
-        // Update cached search results for this resume
-        const searchKey = queryKeys.jobs.search(resumeId);
-        queryClient.setQueryData(searchKey, (oldData) => {
-          if (!oldData || !Array.isArray(oldData.jobs)) return oldData;
-          return {
-            ...oldData,
-            jobs: oldData.jobs.map((job) =>
-              job.id === jobId
-                ? { ...job, trackedApplicationId: applicationId }
-                : job
-            ),
-          };
-        });
+      if (jobId && applicationId) {
+        // Update every cached page in jobs.results infinite queries
+        queryClient.setQueriesData(
+          { queryKey: ["jobs", "results"] },
+          (oldData) => {
+            if (!oldData || !Array.isArray(oldData.pages)) return oldData;
+            return {
+              ...oldData,
+              pages: oldData.pages.map((page) => ({
+                ...page,
+                jobs: Array.isArray(page?.jobs)
+                  ? page.jobs.map((job) =>
+                      job.id === jobId
+                        ? { ...job, trackedApplicationId: applicationId }
+                        : job
+                    )
+                  : page?.jobs,
+              })),
+            };
+          }
+        );
+
+        // Also update jobs.latest in case it is loaded
+        queryClient.setQueriesData(
+          { queryKey: ["jobs", "latest"] },
+          (oldData) => {
+            if (!oldData || !Array.isArray(oldData.jobs)) return oldData;
+            return {
+              ...oldData,
+              jobs: oldData.jobs.map((job) =>
+                job.id === jobId
+                  ? { ...job, trackedApplicationId: applicationId }
+                  : job
+              ),
+            };
+          }
+        );
       }
 
       // Invalidate applications lists, details, and stats

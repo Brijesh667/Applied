@@ -26,9 +26,11 @@ import { Skeleton } from "../components/ui/Skeleton.jsx";
 import { EmptyState } from "../components/ui/EmptyState.jsx";
 import { ErrorState } from "../components/ui/ErrorState.jsx";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog.jsx";
-import { JobCard } from "../components/jobs/JobCard.jsx";
+import { JobCard, MatchRing } from "../components/jobs/JobCard.jsx";
 import { JobCardSkeleton } from "../components/jobs/JobCardSkeleton.jsx";
 import { DidYouApplyDialog } from "../components/jobs/DidYouApplyDialog.jsx";
+import { JobSearchForm } from "../components/jobs/JobSearchForm.jsx";
+import { ResultFilters } from "../components/jobs/ResultFilters.jsx";
 import { STATUSES, REPLY_TYPES, PLATFORMS } from "../lib/constants.js";
 import { usePageTitle } from "../hooks/usePageTitle.js";
 
@@ -51,6 +53,33 @@ export default function Styleguide() {
   const [platform, setPlatform] = useState("LinkedIn");
   const [isChecked1, setIsChecked1] = useState(false);
   const [isChecked2, setIsChecked2] = useState(true);
+
+  // Job search form fixtures state (Phase 3 Part 3)
+  const [styleguideFormCollapsed, setStyleguideFormCollapsed] = useState(true);
+  const [styleguideFormFilters, setStyleguideFormFilters] = useState({
+    jobType: "fulltime",
+    experience: "mid",
+    roles: ["Frontend Engineer", "Full Stack Developer"],
+    location: "Bengaluru",
+    remote: "include",
+    postedWithinDays: 30,
+    minPay: 1800000,
+  });
+
+  // Result filters state
+  const [styleguideActiveResultFilters, setStyleguideActiveResultFilters] = useState({
+    q: "react",
+    remote: "true",
+    payListed: true,
+    sort: "best",
+  });
+
+  const [styleguideIdleResultFilters, setStyleguideIdleResultFilters] = useState({
+    q: "",
+    remote: "any",
+    payListed: false,
+    sort: "best",
+  });
 
   // Sample dates for DueChip
   const now = new Date();
@@ -693,194 +722,183 @@ export default function Styleguide() {
           </div>
         </section>
 
-        {/* Section 11: Jobs Page Components & Fixtures */}
+        {/* Section 11: Jobs Page Redesign & Components */}
         <section className="p-6 rounded-[12px] bg-surface border border-rule space-y-6">
           <div>
-            <h2 className="text-[20px] font-bold text-ink">Jobs: JobCard, Match Meter & States</h2>
+            <h2 className="text-[20px] font-bold text-ink">Jobs: MatchRing, JobCard &amp; Search Components</h2>
             <p className="text-[14px] text-ink-soft mt-1">
-              Job search cards featuring match score meter (thin ink bar, text tier + icon, no yellow),
-              salary formatting, calendar-day posted dates, snippet toggle, and isolated secure Apply button.
+              Premium minimal job search components with quiet density, circular match ring, clamped snippets, collapsed summary bar, clean toolbar, and essential actionable text only.
             </p>
           </div>
 
           <div className="space-y-6">
-            {/* 1. JobCard Mock Fixtures Grid */}
+            {/* 1. MatchRing Fixtures (0, 38, 62, 94) */}
             <div className="flex flex-col gap-3">
               <h3 className="text-[14px] font-medium text-ink-soft">
-                JobCard fixtures (strong, good, weak, remote, pay range, no pay/date, long snippet, invalid URL)
+                MatchRing at 0, 38, 62, and 94%
+              </h3>
+              <div className="flex flex-wrap items-center gap-6 p-4 rounded-[12px] bg-surface border border-rule">
+                <div className="flex items-center gap-2">
+                  <MatchRing score={0} />
+                  <span className="text-[12px] text-ink-soft">0%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MatchRing score={38} />
+                  <span className="text-[12px] text-ink-soft">38%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MatchRing score={62} />
+                  <span className="text-[12px] text-ink-soft">62%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MatchRing score={94} />
+                  <span className="text-[12px] text-ink-soft">94%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. JobCard Fixtures (8 variations) */}
+            <div className="flex flex-col gap-3">
+              <h3 className="text-[14px] font-medium text-ink-soft">
+                JobCard fixtures (short, long title/company, remote with attribution, salary text, no pay, tracked, long snippet, skeleton)
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 1. Strong Match */}
+                {/* 1. Short content */}
                 <JobCard
                   job={{
-                    id: "job-strong",
+                    id: "job-short",
                     source: "adzuna",
                     platform: "Adzuna",
-                    title: "Senior Full Stack Systems Engineer",
+                    title: "Frontend Engineer",
                     company: "Stripe",
-                    location: "Bengaluru, Karnataka",
+                    location: "Bengaluru",
                     remote: false,
-                    snippet: "Build scalable merchant checkout pipelines and distributed payment services handling millions of transactions daily.",
-                    applyUrl: "https://stripe.com/jobs/senior-fullstack",
+                    snippet: "Build checkout UI components and merchant payment dashboards.",
+                    applyUrl: "https://stripe.com/jobs/fe",
                     postedAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString(),
                     employmentType: "full_time",
-                    payMin: 2800000,
-                    payMax: 4200000,
+                    payMin: 2400000,
+                    payMax: 3600000,
                     pay: { type: "yearly" },
                     matchScore: 92,
-                    matchReason: "Matches React, Node.js, TypeScript and 4 years of experience.",
+                    matchReason: "Matches React, TypeScript, and component architecture.",
                     scoredBy: "ai",
                   }}
                   resumeId="styleguide-resume-1"
                 />
 
-                {/* 2. Good Match + Remote */}
+                {/* 2. Very long title & company */}
                 <JobCard
                   job={{
-                    id: "job-good",
-                    source: "jsearch",
-                    platform: "JSearch",
-                    title: "Frontend Experience Engineer",
-                    company: "Razorpay",
-                    location: "Remote, India",
-                    remote: true,
-                    snippet: "Join our dashboard design engineering team to craft responsive and accessible merchant surfaces.",
-                    applyUrl: "https://razorpay.com/careers/frontend",
-                    postedAt: now.toISOString(),
-                    employmentType: "full_time",
-                    pay: { type: "yearly", amount: 1800000 },
-                    matchScore: 68,
-                    matchReason: "Strong match on React, Tailwind CSS, and UI component architecture.",
-                    scoredBy: "ai",
-                  }}
-                  resumeId="styleguide-resume-1"
-                />
-
-                {/* 3. Weak Match (< 50) */}
-                <JobCard
-                  job={{
-                    id: "job-weak",
-                    source: "adzuna",
-                    platform: "Adzuna",
-                    title: "Embedded Firmware & RTOS Developer",
-                    company: "Texas Instruments",
-                    location: "Bengaluru, India",
+                    id: "job-long-title",
+                    source: "careerjet",
+                    platform: "Careerjet",
+                    title: "Staff Distributed Platform Infrastructure and Systems Reliability Architect (Level 6)",
+                    company: "International Business Machines Global Enterprise Solutions Technologies India Private Limited",
+                    location: "Bengaluru, Karnataka, India",
                     remote: false,
-                    snippet: "Develop low-level device drivers and microkernel routines for mission-critical embedded hardware.",
-                    applyUrl: "https://ti.com/careers/embedded",
-                    postedAt: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+                    snippet: "Direct foundational cloud architecture, high-throughput distributed systems, fault-tolerant consensus, and multi-region failover automation across enterprise hybrid cloud customers.",
+                    applyUrl: "https://example.com/jobs/ibm-staff",
+                    postedAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+                    employmentType: "full_time",
+                    payMin: 5000000,
+                    payMax: 7500000,
+                    pay: { type: "yearly" },
+                    matchScore: 84,
+                    matchReason: "Matches cloud infrastructure, Kubernetes, distributed systems, and Go.",
+                    scoredBy: "ai",
+                  }}
+                  resumeId="styleguide-resume-1"
+                />
+
+                {/* 3. Remote with attribution */}
+                <JobCard
+                  job={{
+                    id: "job-remote-attrib",
+                    source: "himalayas",
+                    platform: "Himalayas",
+                    title: "Senior Systems Engineer",
+                    company: "Automattic",
+                    location: "Worldwide",
+                    remote: true,
+                    snippet: "Work on global WordPress.com infrastructure serving billions of pageviews every day with low latency and high availability.",
+                    applyUrl: "https://himalayas.app/jobs/automattic-systems",
+                    postedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
                     employmentType: "full_time",
                     pay: null,
-                    matchScore: 32,
+                    attribution: {
+                      name: "Himalayas",
+                      url: "https://himalayas.app",
+                    },
+                    matchScore: 88,
+                    matchReason: "Matches Linux systems, distributed caching, and backend engineering.",
+                    scoredBy: "ai",
+                  }}
+                  resumeId="styleguide-resume-1"
+                />
+
+                {/* 4. With salary text */}
+                <JobCard
+                  job={{
+                    id: "job-salary-text",
+                    source: "remoteok",
+                    platform: "Remote OK",
+                    title: "Senior Product Designer & UI Engineer",
+                    company: "Linear",
+                    location: "Everywhere",
+                    remote: true,
+                    snippet: "Craft fluid and performant project management interactions with extreme polish, micro-interactions, and keyboard ergonomics.",
+                    applyUrl: "https://remoteok.com/l/linear-designer",
+                    postedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+                    employmentType: "full_time",
+                    pay: null,
+                    salaryText: "$120,000 – $140,000 USD",
+                    attribution: {
+                      name: "Remote OK",
+                      url: "https://remoteok.com",
+                    },
+                    matchScore: 78,
+                    matchReason: "Matches design system engineering and modern React standards.",
+                    scoredBy: "local",
+                  }}
+                  resumeId="styleguide-resume-1"
+                />
+
+                {/* 5. No pay */}
+                <JobCard
+                  job={{
+                    id: "job-no-pay",
+                    source: "jooble",
+                    platform: "Jooble",
+                    title: "Embedded Systems & RTOS Engineer",
+                    company: "Texas Instruments",
+                    location: "Bengaluru",
+                    remote: false,
+                    snippet: "Develop device drivers and microkernel routines for low-power embedded sensor controllers and automotive processors.",
+                    applyUrl: "https://example.com/jobs/ti-embedded",
+                    postedAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    employmentType: "full_time",
+                    pay: null,
+                    payMin: null,
+                    payMax: null,
+                    matchScore: 38,
                     matchReason: "Few overlapping skills; requires low-level C and microcontroller assembly.",
                     scoredBy: "local",
                   }}
                   resumeId="styleguide-resume-1"
                 />
 
-                {/* 4. Remote + Pay Range */}
-                <JobCard
-                  job={{
-                    id: "job-remote-range",
-                    source: "jsearch",
-                    platform: "JSearch",
-                    title: "Staff Distributed Systems Architect",
-                    company: "GitHub",
-                    location: "Remote",
-                    remote: true,
-                    snippet: "Lead architecture for high-throughput distributed git replication and backend caching systems.",
-                    applyUrl: "https://github.com/careers/distributed-architect",
-                    postedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-                    employmentType: "full_time",
-                    payMin: 4500000,
-                    payMax: 6000000,
-                    pay: { type: "yearly" },
-                    matchScore: 88,
-                    matchReason: "Matches distributed systems, Go, and high-concurrency systems design.",
-                    scoredBy: "ai",
-                  }}
-                  resumeId="styleguide-resume-1"
-                />
-
-                {/* 5. No Pay + No Posted Date */}
-                <JobCard
-                  job={{
-                    id: "job-nopay-nodate",
-                    source: "adzuna",
-                    platform: "Adzuna",
-                    title: "Product Designer & UI Engineer",
-                    company: "Linear",
-                    location: "San Francisco, CA",
-                    remote: true,
-                    snippet: "Craft fluid and performant project management interactions with extreme polish and attention to detail.",
-                    applyUrl: "https://linear.app/careers/product-designer",
-                    postedAt: null,
-                    employmentType: "contract",
-                    pay: null,
-                    payMin: null,
-                    payMax: null,
-                    matchScore: 78,
-                    matchReason: "Matches design system engineering and modern frontend standards.",
-                    scoredBy: "ai",
-                  }}
-                  resumeId="styleguide-resume-1"
-                />
-
-                {/* 6. Long Snippet (with Show more / Show less toggle) */}
-                <JobCard
-                  job={{
-                    id: "job-long-snippet",
-                    source: "jsearch",
-                    platform: "JSearch",
-                    title: "Lead Cloud Infrastructure Architect",
-                    company: "Amazon Web Services",
-                    location: "Hyderabad, India",
-                    remote: false,
-                    snippet: "Amazon Web Services is seeking a Lead Architect to direct foundational cloud infrastructure. You will be responsible for defining technical strategies, leading cross-organizational initiatives, mentoring principal engineers, and evaluating architectural trade-offs across storage, compute, and networking layers. Candidates must demonstrate deep expertise in high-throughput distributed systems, fault-tolerant consensus algorithms, and multi-region failover automation.",
-                    applyUrl: "https://amazon.jobs/lead-architect",
-                    postedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-                    employmentType: "full_time",
-                    pay: { type: "yearly", amount: 5200000 },
-                    matchScore: 84,
-                    matchReason: "High relevance to large-scale distributed systems and cloud infrastructure.",
-                    scoredBy: "ai",
-                  }}
-                  resumeId="styleguide-resume-1"
-                />
-
-                {/* 7. Invalid Apply URL (Apply button hidden) */}
-                <JobCard
-                  job={{
-                    id: "job-invalid-url",
-                    source: "adzuna",
-                    platform: "Adzuna",
-                    title: "DevOps Engineer (Confidential Posting)",
-                    company: "Stealth Startup",
-                    location: "Bengaluru, India",
-                    remote: false,
-                    snippet: "Early stage startup looking for an infrastructure engineer. Confidential posting; apply button safely omitted due to internal referral-only protocol.",
-                    applyUrl: "javascript:void(0)",
-                    postedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-                    employmentType: "full_time",
-                    pay: { type: "monthly", amount: 150000 },
-                    matchScore: 62,
-                    matchReason: "Matches Docker, Kubernetes, and automated deployment pipelines.",
-                    scoredBy: "local",
-                  }}
-                  resumeId="styleguide-resume-1"
-                />
-
-                {/* 8. Tracked Job Card */}
+                {/* 6. Tracked job card */}
                 <JobCard
                   job={{
                     id: "job-tracked",
                     source: "adzuna",
                     platform: "Adzuna",
-                    title: "Platform Systems Architect (Tracked)",
+                    title: "Platform Systems Architect",
                     company: "Atlassian",
-                    location: "Bengaluru, India",
+                    location: "Bengaluru",
                     remote: true,
-                    snippet: "Build foundational distributed collaboration systems. Application was tracked from job search.",
+                    snippet: "Build foundational distributed collaboration systems for Jira and Confluence Cloud multi-tenant infrastructure.",
                     applyUrl: "https://atlassian.com/careers/platform-architect",
                     postedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
                     employmentType: "full_time",
@@ -895,46 +913,306 @@ export default function Styleguide() {
                   resumeId="styleguide-resume-1"
                 />
 
-                {/* 9. Skeleton Placeholder */}
+                {/* 7. Long snippet (clamped, no toggle) */}
+                <JobCard
+                  job={{
+                    id: "job-long-snippet-clamped",
+                    source: "jsearch",
+                    platform: "JSearch",
+                    title: "Lead Cloud Infrastructure Architect",
+                    company: "Amazon Web Services",
+                    location: "Hyderabad",
+                    remote: false,
+                    snippet: "Amazon Web Services is seeking a Lead Architect to direct foundational cloud infrastructure. You will be responsible for defining technical strategies, leading cross-organizational initiatives, mentoring principal engineers, and evaluating architectural trade-offs across storage, compute, and networking layers. Candidates must demonstrate deep expertise in high-throughput distributed systems, fault-tolerant consensus algorithms, and multi-region failover automation.",
+                    applyUrl: "https://amazon.jobs/lead-architect",
+                    postedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+                    employmentType: "full_time",
+                    pay: { type: "yearly", amount: 5200000 },
+                    matchScore: 84,
+                    matchReason: "High relevance to large-scale distributed systems and cloud infrastructure.",
+                    scoredBy: "ai",
+                  }}
+                  resumeId="styleguide-resume-1"
+                />
+
+                {/* 8. Skeleton placeholder */}
                 <JobCardSkeleton />
               </div>
             </div>
 
-            {/* 2. Error States */}
+            {/* 3. JobSearchForm Fixtures (Empty, Filled, Error, Searching) */}
             <div className="flex flex-col gap-3 pt-4 border-t border-rule">
               <h3 className="text-[14px] font-medium text-ink-soft">
-                Job Search Error States
+                JobSearchForm fixtures (empty, filled, inline server error, searching state)
+              </h3>
+
+              {/* A. Empty Form */}
+              <div className="space-y-1">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  A. Empty form (without search)
+                </span>
+                <JobSearchForm
+                  resumes={[
+                    { id: "res-1", label: "Full Stack Engineer (Default)", isDefault: true },
+                    { id: "res-2", label: "DevOps Architect", isDefault: false },
+                  ]}
+                  activeResumeId="res-1"
+                  filters={{
+                    jobType: "any",
+                    experience: "any",
+                    roles: [],
+                    location: "",
+                    remote: "include",
+                    postedWithinDays: 0,
+                    minPay: 0,
+                  }}
+                  isCollapsed={false}
+                  hasSearch={false}
+                  onSubmit={() => toast.success("Find jobs submitted")}
+                  onResetToDefaults={() => toast.info("Reset to defaults")}
+                />
+              </div>
+
+              {/* B. Filled Form */}
+              <div className="space-y-1 pt-3">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  B. Filled form
+                </span>
+                <JobSearchForm
+                  resumes={[
+                    { id: "res-1", label: "Full Stack Engineer (Default)", isDefault: true },
+                  ]}
+                  activeResumeId="res-1"
+                  filters={styleguideFormFilters}
+                  isCollapsed={false}
+                  hasSearch={true}
+                  onChangeFilter={(field, val) =>
+                    setStyleguideFormFilters((prev) => ({ ...prev, [field]: val }))
+                  }
+                  onSubmit={() => toast.success("Find jobs submitted")}
+                  onResetToDefaults={() => toast.info("Reset to defaults")}
+                />
+              </div>
+
+              {/* C. Form with Inline Error */}
+              <div className="space-y-1 pt-3">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  C. Form with server error
+                </span>
+                <JobSearchForm
+                  resumes={[
+                    { id: "res-1", label: "Full Stack Engineer (Default)", isDefault: true },
+                  ]}
+                  activeResumeId="res-1"
+                  filters={{
+                    jobType: "internship",
+                    experience: "fresher",
+                    roles: ["Software Developer"],
+                    location: "New Delhi",
+                    remote: "only",
+                    postedWithinDays: 7,
+                    minPay: 400000,
+                  }}
+                  isCollapsed={false}
+                  hasSearch={true}
+                  serverError="Invalid search request. Rate limit reached for provider."
+                  onSubmit={() => toast.success("Find jobs submitted")}
+                  onResetToDefaults={() => toast.info("Reset to defaults")}
+                />
+              </div>
+
+              {/* D. Form Loading (Searching) */}
+              <div className="space-y-1 pt-3">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  D. Form loading ("Searching")
+                </span>
+                <JobSearchForm
+                  resumes={[
+                    { id: "res-1", label: "Full Stack Engineer (Default)", isDefault: true },
+                  ]}
+                  activeResumeId="res-1"
+                  filters={styleguideFormFilters}
+                  isCollapsed={false}
+                  hasSearch={true}
+                  isLoading={true}
+                  onSubmit={() => {}}
+                  onResetToDefaults={() => {}}
+                />
+              </div>
+            </div>
+
+            {/* 4. Collapsed Slim Summary Bar Fixtures */}
+            <div className="flex flex-col gap-3 pt-4 border-t border-rule">
+              <h3 className="text-[14px] font-medium text-ink-soft">
+                Collapsed summary bar (short criteria, very long criteria)
+              </h3>
+
+              {/* Short criteria */}
+              <div className="space-y-1">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  A. Short criteria
+                </span>
+                <JobSearchForm
+                  resumes={[{ id: "res-1", label: "Full Stack Engineer", isDefault: true }]}
+                  activeResumeId="res-1"
+                  filters={{
+                    jobType: "fulltime",
+                    experience: "mid",
+                    roles: ["Frontend Engineer"],
+                    location: "Bengaluru",
+                    remote: "include",
+                    postedWithinDays: 30,
+                    minPay: 0,
+                  }}
+                  isCollapsed={styleguideFormCollapsed}
+                  hasSearch={true}
+                  onToggleCollapse={() => setStyleguideFormCollapsed((c) => !c)}
+                  onSubmit={() => {}}
+                  onResetToDefaults={() => {}}
+                />
+              </div>
+
+              {/* Very long criteria */}
+              <div className="space-y-1 pt-3">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  B. Very long criteria
+                </span>
+                <JobSearchForm
+                  resumes={[{ id: "res-1", label: "Full Stack Engineer", isDefault: true }]}
+                  activeResumeId="res-1"
+                  filters={{
+                    jobType: "contract",
+                    experience: "senior",
+                    roles: [
+                      "Staff Frontend Infrastructure Engineer",
+                      "Distributed Systems Lead",
+                      "Cloud Platform Architect",
+                      "Principal Site Reliability Engineer",
+                      "Developer Experience Architect",
+                    ],
+                    location: "Bengaluru, Karnataka, India",
+                    remote: "only",
+                    postedWithinDays: 14,
+                    minPay: 4500000,
+                  }}
+                  isCollapsed={true}
+                  hasSearch={true}
+                  onToggleCollapse={() => setStyleguideFormCollapsed(false)}
+                  onSubmit={() => {}}
+                  onResetToDefaults={() => {}}
+                />
+              </div>
+            </div>
+
+            {/* 5. ResultFilters Toolbar Fixtures (Idle & Active) */}
+            <div className="flex flex-col gap-3 pt-4 border-t border-rule">
+              <h3 className="text-[14px] font-medium text-ink-soft">
+                ResultFilters toolbar (idle &amp; active)
+              </h3>
+
+              {/* Idle toolbar */}
+              <div className="space-y-1">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  A. Idle toolbar
+                </span>
+                <ResultFilters
+                  filters={styleguideIdleResultFilters}
+                  onChangeFilter={(field, val) =>
+                    setStyleguideIdleResultFilters((prev) => ({ ...prev, [field]: val }))
+                  }
+                  onClearFilters={() =>
+                    setStyleguideIdleResultFilters({
+                      q: "",
+                      remote: "any",
+                      payListed: false,
+                      sort: "best",
+                    })
+                  }
+                />
+              </div>
+
+              {/* Active toolbar */}
+              <div className="space-y-1 pt-3">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft">
+                  B. Active toolbar (search query, remote filter, pay listed active)
+                </span>
+                <ResultFilters
+                  filters={styleguideActiveResultFilters}
+                  onChangeFilter={(field, val) =>
+                    setStyleguideActiveResultFilters((prev) => ({ ...prev, [field]: val }))
+                  }
+                  onClearFilters={() =>
+                    setStyleguideActiveResultFilters({
+                      q: "",
+                      remote: "any",
+                      payListed: false,
+                      sort: "best",
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            {/* 6. Empty & Error States */}
+            <div className="flex flex-col gap-3 pt-4 border-t border-rule">
+              <h3 className="text-[14px] font-medium text-ink-soft">
+                Jobs empty states &amp; error state
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* No jobs match filters */}
+                <div className="p-4 rounded-[12px] bg-sunken/30 border border-rule">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft block mb-2">
+                    No jobs match (filtered)
+                  </span>
+                  <EmptyState
+                    title="No jobs match"
+                    description="Try clearing some filters or searching for different terms."
+                    action={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => toast.info("Filters cleared")}
+                        className="mt-2"
+                      >
+                        Clear filters
+                      </Button>
+                    }
+                  />
+                </div>
+
+                {/* No jobs found */}
+                <div className="p-4 rounded-[12px] bg-sunken/30 border border-rule">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-soft block mb-2">
+                    No jobs found
+                  </span>
+                  <EmptyState
+                    title="No jobs found"
+                    description="We couldn't find openings matching this resume. Try expanding your search criteria."
+                    action={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => toast.info("Edit search clicked")}
+                        className="mt-2"
+                      >
+                        Edit search
+                      </Button>
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Error State */}
+              <div className="pt-2">
                 <ErrorState
                   title="Couldn't find jobs"
                   message="Job search providers are currently unavailable. Please try again in a few minutes."
                   onRetry={() => toast.info("Retrying search...")}
                 />
-                <ErrorState
-                  title="Search rate limit reached"
-                  message="You've reached the search rate limit. Please try again later."
-                />
               </div>
             </div>
 
-            {/* 3. Empty State */}
-            <div className="flex flex-col gap-3 pt-4 border-t border-rule">
-              <h3 className="text-[14px] font-medium text-ink-soft">
-                Job Search Empty State
-              </h3>
-              <EmptyState
-                title="No jobs found"
-                description="We couldn't find any openings matching this resume's skills or roles. Try updating your resume with more skills."
-                action={
-                  <Button variant="secondary" size="sm" onClick={() => toast.info("Navigate to Resumes")}>
-                    Update resume
-                  </Button>
-                }
-              />
-            </div>
-
-            {/* 4. "Did you apply?" Dialog Interactive Fixtures */}
+            {/* 7. "Did you apply?" Dialog Interactive Fixtures */}
             <div className="flex flex-col gap-3 pt-4 border-t border-rule">
               <h3 className="text-[14px] font-medium text-ink-soft">
                 "Did you apply?" Dialog &amp; 404 state

@@ -89,6 +89,10 @@ SEED_EMAIL="you@example.com" SEED_PASSWORD="<your-password>" npm run seed
 | `ADZUNA_APP_ID` | No | `your_app_id` | Optional Adzuna Application ID for job search. Provider enabled only if both ID and Key exist. |
 | `ADZUNA_APP_KEY` | No | `your_app_key` | Optional Adzuna Application Key for job search. Never log or return in responses. |
 | `JSEARCH_API_KEY` | No | `your_rapidapi_key` | Optional RapidAPI key for JSearch job search. Spend carefully (free quota is ~100-200 requests/month). |
+| `JOOBLE_API_KEY` | No | `your_jooble_api_key` | Optional Jooble API key for job search (India and 60+ countries). Never log or return in responses. |
+| `CAREERJET_API_KEY` | No | `your_careerjet_key` | Optional Careerjet API key for job search (Basic auth). Requires end user IP and User Agent. |
+| `CAREERJET_LOCALE` | No | `en_IN` | Optional Careerjet locale code (default: `en_IN`). Supported: `en_IN`, `en_GB`, `en_US`, `en_CA`, etc. |
+| `JOB_PROVIDERS` | No | `adzuna,jooble,himalayas` | Optional comma-separated list of enabled providers, or `none` to disable all. Default: all keyed providers that have keys + `himalayas` + `remoteok`. |
 | `SEED_EMAIL` | Only for seeding | `you@example.com` | Email for seed script (`scripts/seed.js`). |
 | `SEED_PASSWORD` | Only for seeding | `<your-password>` | Password for seed script (`scripts/seed.js`). |
 
@@ -113,19 +117,47 @@ The backend supports switchable AI providers for extracting skills, target roles
 
 If the API key for the active provider is missing, the backend boots normally with an `AI parsing disabled` warning, and resumes are marked with `parseStatus: "failed"` and `parseError: "ai_unavailable"`.
 
-### Configuring Job Search Providers (Phase 2, Part 1)
-Job search integrates with two external providers:
+### Configuring Job Search Providers (Phase 2 & Phase 3, Part 1)
+Job search integrates with six providers across localized and remote roles:
+
+| Provider | Key | Region | Notes |
+|---|---|---|---|
+| **Adzuna** | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | India | Up to 2 requests per search, yearly INR salary |
+| **JSearch** | `JSEARCH_API_KEY` | India / Global | 1 request per search, RapidAPI (~100-200 calls/month quota) |
+| **Jooble** | `JOOBLE_API_KEY` | India and 60+ countries | Key in URL, free-text salary parsing, attribution required |
+| **Careerjet** | `CAREERJET_API_KEY` | India and 90+ countries | Basic auth, end user IP & User-Agent required, untouched tracking URLs, attribution required |
+| **Himalayas** | None (public API) | Remote | In-memory TTL cache (1 hour), USD salary text, attribution required |
+| **RemoteOK** | None (public feed) | Remote | ~100 jobs feed, shared in-memory cache (1 hour), local keyword filtering, attribution required |
+
+#### Where to Get Keys & Terms:
 1. **Adzuna**:
    - Register at [Adzuna Developer Portal](https://developer.adzuna.com/) to get an **App ID** and **App Key**.
    - Set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` in `backend/.env`. Both must be present to enable Adzuna.
 2. **JSearch (RapidAPI)**:
    - Register at [RapidAPI JSearch](https://rapidapi.com/letscrape-6bRBa3qguO5/api/jsearch) and subscribe to the free tier to obtain an API key.
    - Set `JSEARCH_API_KEY` in `backend/.env`.
-   - **Quota notice**: The JSearch free tier permits approximately 100-200 requests per month. The backend caps JSearch calls to 1 request per search to conserve quota.
+3. **Jooble**:
+   - Register via [Jooble API Portal](https://jooble.org/api/about) to get an API key.
+   - Set `JOOBLE_API_KEY` in `backend/.env`. The key is incorporated in the POST URL path and is never logged.
+   - **Terms**: Includes attribution `{ name: "Jooble", url: "https://jooble.org" }`.
+4. **Careerjet**:
+   - Register via [Careerjet Partners / Publisher](https://www.careerjet.com/partners/) to get a website/publisher key.
+   - Set `CAREERJET_API_KEY` and optional `CAREERJET_LOCALE` (default: `en_IN`).
+   - Requires end user IP and User Agent (`req.ip`, `req.get("user-agent")`) in request context; skips with `status: "skipped"` if missing.
+   - **Terms**: Preserves original tracking apply URL and sets attribution `{ name: "Careerjet", url: null }`.
+5. **Himalayas**:
+   - Free public JSON API (`https://himalayas.app/jobs/api`). No key required.
+   - Cached in memory per query for 1 hour (`JOB_HIMALAYAS_CACHE_SECONDS = 3600`).
+   - **Terms**: Attribution required with link to `https://himalayas.app`; jobs must not be forwarded to other job boards or aggregators.
+6. **RemoteOK**:
+   - Free public feed (`https://remoteok.com/api`). No key required.
+   - Entire feed cached in memory once for all users for 1 hour (`JOB_REMOTEOK_FEED_CACHE_SECONDS = 3600`), then filtered locally by whole keywords (capped at 20).
+   - **Terms**: Attribution required with link back to the job's RemoteOK listing.
 
-**Missing Keys & Graceful Degradation**:
-- Both providers are optional. The server boots cleanly if keys are missing, logging a warning listing unconfigured providers.
-- If neither provider is configured, `POST /api/jobs/search` responds with `503 Service Unavailable` (`{ message: "Job search is not configured yet" }`).
+**Provider Selection & Graceful Degradation**:
+- Configure `JOB_PROVIDERS` in `.env` to enable a subset (e.g. `JOB_PROVIDERS=adzuna,jooble,himalayas`), or set `JOB_PROVIDERS=none` to disable all (triggers `503 Service Unavailable`).
+- Default: every keyed provider that has its key present + the two keyless providers (`himalayas`, `remoteok`).
+- Boot logs one warning listing any providers that are not enabled. Keys and IPs are never logged.
 - Search results are deduplicated and cached for 24 hours (`JOB_SEARCH_CACHE_TTL_SECONDS = 86400`) in MongoDB (`JobSearchCache`). Refresh requests younger than 1 hour (`JOB_SEARCH_REFRESH_MIN_AGE_SECONDS = 3600`) return cached results immediately without calling external APIs.
 - Per-user rate limiting is enforced at 10 requests per hour (`JOB_SEARCH_LIMIT_PER_HOUR = 10`) keyed by authenticated session user ID.
 
@@ -232,59 +264,115 @@ Job search integrates with two external providers:
 > [!NOTE]
 > Applications (`/api/applications`) support an optional `resumeId` reference. On create/update, the referenced resume is verified to belong to the authenticated user. When a resume is deleted, referenced applications automatically have their `resumeId` cleared (`null`).
 
-### Jobs (`/api/jobs`) — Phase 2
+### Jobs (`/api/jobs`) — Phase 2 & Phase 3 (Backend Part 1 & Part 2)
+> [!NOTE]
+> Frontend Part 3 will connect to and use these new endpoints (`/api/jobs/searches/:searchId/jobs` and `/api/jobs/searches/latest`).
+
 | Method | Path | Auth Required | Description |
 | :--- | :--- | :---: | :--- |
-| `POST` | `/api/jobs/search` | **Yes** | Search and rank jobs matching a user's resume. Body: `{ resumeId: string, refresh?: boolean }`. Queries Adzuna and JSearch, normalizes listings, deduplicates collisions, scores candidates locally, evaluates top 25 candidates with a single batched AI call, and caches results for 24 hours. Rate limited to 10 requests/hour per user. Computes dynamic `trackedApplicationId` per job against user's applications. |
+| `POST` | `/api/jobs/search` | **Yes** | Search and rank jobs matching a user's resume and optional filters. Body: `{ resumeId: string, filters?: Object, refresh?: boolean }`. Normalizes listings, applies local filters, scores candidates, evaluates top 25 with AI, stores up to 150 ranked jobs in `JobSearchCache`, and returns page 1 (20 items) with facets and search metadata. Rate limited to 10 requests/hour per user. Computes dynamic `trackedApplicationId` per job against user's applications. |
+| `GET` | `/api/jobs/searches/:searchId/jobs` | **Yes** | Reads stored jobs from a previous search with server-side result filtering, sorting (`best` or `newest`), pagination, and facet counts across the whole stored list. Zero external provider or AI calls. Expired or deleted search returns `404 { message: "This search has expired. Search again." }`. |
+| `GET` | `/api/jobs/searches/latest` | **Yes** | Restores the user's latest unexpired search (optional `?resumeId=`) including canonical filters, page 1 results, and facets so the frontend does not require localStorage or Redux. Returns `404 { message: "No recent search" }` if none found. Zero external provider or AI calls. |
 | `POST` | `/api/jobs/track` | **Yes** | Track a job from search results into an Application document. Body: `{ resumeId: string, jobId: string }`. Fetches the job from the server's cache, checks for URL duplicates (returns `409 { message, applicationId }` if already tracked), maps fields, and creates a new application (`201 { application }`). Rate limited to 60 requests/hour per user. |
 
-#### Job Search & Ranking Pipeline:
-1. **Local Scoring (Deterministic Heuristic)**:
-   - **Skills (up to 50 pts)**: Proportion of candidate's top 15 skills matching whole words in job title + snippet (robust against punctuation: `Node.js`, `C++`, `C#`).
-   - **Role Overlap (up to 30 pts)**: Overlap of non-stop words between candidate role titles and job title (generic terms like "developer" only count when accompanied by specific role terms).
-   - **Level Fit (+15 to -20 pts)**: Freshers/interns receive bonuses for entry words and penalties for senior/lead requirements; experienced candidates penalize intern postings.
-   - **Location (up to 5 pts)**: Preference matches job location or remote indicators.
-   - Clamped to integer `0..100`, accompanied by a factual one-line `matchReason` ($\le 120$ chars).
-2. **Top Candidate Cut**:
-   - The top 25 jobs by local score (`JOB_RANK_CANDIDATES = 25`) are selected for AI evaluation.
-3. **Batched AI Ranking**:
-   - Exactly **one** AI call is dispatched for all 25 candidate jobs using structured output (Anthropic tool use or Google JSON schema).
-   - Only non-PII fields (`roleTitles`, `skills`, `experienceYears`, `locationPreference`, and for each job: `id`, `title`, `company`, `location`, `snippet` capped at 300 chars) are sent to the model.
-   - Zero automatic retries on quota or rate-limit errors; at most one retry on timeouts or 5xx.
-4. **Graceful Fallback**:
-   - If AI is unavailable, over quota, times out, or returns invalid output, the locally scored results are returned (`rankedBy: "local"`). Searches never fail due to ranking issues.
-5. **Response Fields**:
-   - Per job: `matchScore` (0..100 integer), `matchReason` (string $\le 120$ chars), `scoredBy` (`"ai"` or `"local"`).
-   - Top-level: `rankedBy` (`"ai"` or `"local"`), `rankStatus` (`"ok" | "unavailable" | "quota" | "timeout" | "invalid_output" | "failed" | "skipped"`), `sources`, `cached`, `generatedAt`.
-   - Cache: Results stored in `JobSearchCache`; cache hits return stored rankings with `cached: true` and never trigger AI calls.
+#### Search Filters (`POST /api/jobs/search`):
+| Filter | Values | Default when missing |
+|---|---|---|
+| `jobType` | `any`, `internship`, `fulltime`, `parttime` | `any` |
+| `experience` | `any`, `fresher`, `junior`, `mid` | derived from resume `experienceYears` (null/0: fresher, 1: junior, 2..4: mid, 5+: any) |
+| `roles` | array of strings, max 5, each 1 to 60 chars | resume `roleTitles` |
+| `location` | string up to 100 | resume `locationPreference` |
+| `remote` | `include`, `only`, `exclude` | `include` |
+| `postedWithinDays` | `7`, `30`, `60` | `60` (`JOB_MAX_AGE_DAYS`) |
+| `minPay` | integer 0 to 10,000,000 (INR/yr) or null | `null` |
 
-**Job Search Response Shape**:
+#### Provider Mapping Table:
+| Provider | Native Supported Parameters | Local Enforcement |
+|---|---|---|
+| **Adzuna** | `what` (adds "intern" if internship), `where`, `max_days_old`, `salary_min`, `full_time` or `part_time`, `results_per_page=50` (1 request) | Inferred level and fine-grained pay |
+| **Jooble** | `keywords`, `location`, `salary`, up to 2 pages (`JOB_JOOBLE_MAX_PAGES`) | Job type, career level, remote |
+| **Careerjet** | `keywords`, `location`, `contract_type=i` (for internship), `work_hours` (f or p), `sort=date`, `page_size=100` | Minimum pay, level, remote |
+| **JSearch** | `query`, `employment_types` (FULLTIME, PARTTIME, INTERN), `date_posted` (week, month), `remote_jobs_only` | Minimum pay, level |
+| **Himalayas** | Keyword only; skipped when `remote: "exclude"` | Job type, level, date, pay |
+| **RemoteOK** | Keyword only; skipped when `remote: "exclude"` | Job type, level, date, pay |
+
+#### Job Search Response Shape (`POST /api/jobs/search` & `GET /api/jobs/searches/latest`):
 ```json
 {
+  "search": {
+    "id": "6730a1b2c3d4e5f678901234",
+    "resumeId": "654c1234567890abcdef0001",
+    "filters": {
+      "jobType": "fulltime",
+      "experience": "mid",
+      "roles": ["Full-Stack Developer", "Software Engineer"],
+      "location": "Bengaluru",
+      "remote": "include",
+      "postedWithinDays": 60,
+      "minPay": null
+    },
+    "generatedAt": "2026-11-10T06:00:00.000Z",
+    "expiresAt": "2026-11-11T06:00:00.000Z",
+    "cached": false,
+    "rankedBy": "ai",
+    "rankStatus": "ok",
+    "sources": { "adzuna": "ok", "jooble": "ok", "himalayas": "ok", "remoteok": "ok" }
+  },
   "jobs": [
     {
       "id": "adzuna-12345",
       "source": "adzuna",
       "platform": "Adzuna",
       "title": "Full-Stack Developer",
-      "company": "Infosys",
-      "location": "Bengaluru, Karnataka",
+      "company": "Acme Tech",
+      "location": "Bengaluru",
       "remote": false,
-      "snippet": "Looking for a full-stack engineer experienced in React and Node.js...",
+      "snippet": "Looking for a developer skilled in React and Node.js...",
       "applyUrl": "https://www.adzuna.in/land/ad/12345",
-      "postedAt": "2026-11-05T12:00:00.000Z",
-      "pay": { "type": "yearly", "amount": 750000 },
-      "matchScore": 88,
-      "matchReason": "Strong match for React and Node.js with junior level fit",
-      "scoredBy": "ai"
+      "postedAt": "2026-11-09T10:00:00.000Z",
+      "jobType": "fulltime",
+      "level": "mid",
+      "rank": 1,
+      "pay": { "type": "yearly", "amount": 1200000 },
+      "matchScore": 92,
+      "matchReason": "Strong match with React and Node.js skills.",
+      "scoredBy": "ai",
+      "attribution": null,
+      "salaryText": null,
+      "trackedApplicationId": null
     }
   ],
-  "total": 1,
-  "sources": { "adzuna": "ok", "jsearch": "skipped" },
+  "total": 120,
+  "page": 1,
+  "limit": 20,
+  "hasMore": true,
+  "facets": {
+    "total": 120,
+    "bySource": { "adzuna": 40, "jsearch": 0, "jooble": 35, "careerjet": 0, "himalayas": 25, "remoteok": 20 },
+    "remote": { "yes": 45, "no": 75 },
+    "byMatch": { "strong": 25, "good": 60, "weak": 35 },
+    "withPay": 50,
+    "tracked": 0
+  },
+  "cached": false,
+  "generatedAt": "2026-11-10T06:00:00.000Z",
   "rankedBy": "ai",
   "rankStatus": "ok",
-  "cached": false,
-  "generatedAt": "2026-11-07T05:40:00.000Z"
+  "sources": { "adzuna": "ok", "jooble": "ok", "himalayas": "ok", "remoteok": "ok" }
+}
+```
+
+#### Paged Stored Jobs Response Shape (`GET /api/jobs/searches/:searchId/jobs`):
+Query params: `page`, `limit`, `sort` (`best` | `newest`), `source`, `remote` (`true` | `false`), `match` (`strong` | `good` | `weak`), `payListed` (`true`), `hideTracked` (`true`), `q` (plain text string $\le 50$ chars).
+```json
+{
+  "jobs": [ ... ],
+  "total": 85,
+  "page": 1,
+  "limit": 20,
+  "hasMore": true,
+  "facets": { ... },
+  "search": { ... }
 }
 ```
 

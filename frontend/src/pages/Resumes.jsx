@@ -14,7 +14,7 @@ import { useResumes } from "../hooks/useResumes.js";
 import { MAX_RESUMES_PER_USER } from "../lib/constants.js";
 import { PageContainer } from "../components/layout/PageContainer.jsx";
 import { PageHeader } from "../components/layout/PageHeader.jsx";
-import { Button } from "../components/ui/Button.jsx";
+import { Button as MovingBorderButton } from "../registry/aceternity-ui/moving-border.jsx";
 import { EmptyState } from "../components/ui/EmptyState.jsx";
 import { ErrorState } from "../components/ui/ErrorState.jsx";
 import { ResumeCard } from "../components/resumes/ResumeCard.jsx";
@@ -43,9 +43,11 @@ export default function Resumes() {
         }
         actions={
           <div className="flex flex-col items-end gap-1">
-            <Button
-              variant="primary"
-              size="md"
+            <MovingBorderButton
+              duration={3000}
+              borderRadius="1.75rem"
+              containerClassName="w-44 h-9"
+              className="text-sm font-medium text-white gap-1.5"
               disabled={isAtLimit}
               onClick={() => setIsUploadOpen(true)}
               title={
@@ -54,9 +56,9 @@ export default function Resumes() {
                   : undefined
               }
             >
-              <Plus className="w-4 h-4 mr-1.5" aria-hidden="true" />
-              Upload resume
-            </Button>
+              <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>Upload resume</span>
+            </MovingBorderButton>
             {isAtLimit && (
               <p
                 role="status"
@@ -97,12 +99,16 @@ export default function Resumes() {
             title="No resumes yet"
             description="Upload a PDF or DOCX resume up to 5 MB to use with applications."
             action={
-              <Button
-                variant="primary"
+              <MovingBorderButton
+                duration={3000}
+                borderRadius="1.75rem"
+                containerClassName="w-44 h-9"
+                className="text-sm font-medium text-white gap-1.5"
                 onClick={() => setIsUploadOpen(true)}
               >
-                Upload resume
-              </Button>
+                <UploadCloud className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span>Upload resume</span>
+              </MovingBorderButton>
             }
           />
         )}

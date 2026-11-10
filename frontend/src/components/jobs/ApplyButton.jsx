@@ -1,10 +1,11 @@
 import React from "react";
 import { ExternalLink } from "lucide-react";
+import { Button as MovingBorderButton } from "../../registry/aceternity-ui/moving-border.jsx";
 import { cn } from "../../lib/cn.js";
 
 /**
  * ApplyButton component
- * Opens the external job posting in a new tab with security attributes.
+ * Opens the external job posting in a new tab with security attributes and animated moving border.
  * Strictly validates http:// or https:// prefix; if invalid, renders nothing.
  */
 export function ApplyButton({
@@ -12,7 +13,6 @@ export function ApplyButton({
   applyUrl,
   resumeId,
   className = "",
-  variant = "primary",
   size = "sm",
 }) {
   const url = (job?.applyUrl || applyUrl || "").trim();
@@ -21,17 +21,6 @@ export function ApplyButton({
   if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
     return null;
   }
-
-  const isPrimary = variant === "primary";
-
-  const sizeStyles = {
-    sm: "h-8 px-3 text-[14px] leading-[20px] gap-1.5",
-    md: "h-10 px-4 text-[16px] leading-[24px] gap-2",
-  };
-
-  const variantStyles = isPrimary
-    ? "bg-primary text-on-primary hover:bg-primary-hover border border-transparent"
-    : "bg-surface text-ink border border-rule hover:bg-sunken";
 
   const company = job?.company || "";
   const title = job?.title || "";
@@ -56,22 +45,25 @@ export function ApplyButton({
   };
 
   return (
-    <a
+    <MovingBorderButton
+      as="a"
       href={url}
       target="_blank"
       rel="noopener noreferrer"
       onClick={handleClick}
       aria-label={accessibleLabel}
-      className={cn(
-        "select-none relative inline-flex items-center justify-center font-medium rounded-[8px] cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2",
-        sizeStyles[size] || sizeStyles.sm,
-        variantStyles,
+      duration={3000}
+      borderRadius="0.5rem"
+      containerClassName={cn(
+        "h-8 w-24 select-none cursor-pointer inline-flex",
+        size === "md" && "h-10 w-28",
         className
       )}
+      className="bg-slate-900 text-white dark:bg-zinc-900 border-slate-700/80 text-[14px] font-medium gap-1.5 px-3 py-1 hover:text-white"
     >
       <span>Apply</span>
       <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-80" aria-hidden="true" />
-    </a>
+    </MovingBorderButton>
   );
 }
 

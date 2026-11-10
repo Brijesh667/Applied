@@ -5,9 +5,10 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "lint": "node --check src/server.js src/config/env.js src/config/constants.js src/services/ai/clients.js src/services/resumeAi.js src/services/jobs/queryBuilder.js src/services/jobs/adzuna.js src/services/jobs/jsearch.js src/services/jobs/normalize.js src/services/jobs/dedupe.js src/services/jobs/localScore.js src/services/jobs/jobRankAi.js src/services/jobs/jobRankService.js src/services/jobs/jobToApplication.js src/models/JobSearchCache.js src/controllers/job.controller.js src/validators/job.validators.js src/routes/job.routes.js scripts/jobs-selftest.js",
+    "lint": "node --check src/server.js src/config/env.js src/config/constants.js src/services/ai/clients.js src/services/resumeAi.js src/services/jobs/queryBuilder.js src/services/jobs/adzuna.js src/services/jobs/jsearch.js src/services/jobs/jooble.js src/services/jobs/careerjet.js src/services/jobs/himalayas.js src/services/jobs/remoteok.js src/services/jobs/normalize.js src/services/jobs/dedupe.js src/services/jobs/localScore.js src/services/jobs/applyFilters.js src/services/jobs/jobRankAi.js src/services/jobs/jobRankService.js src/services/jobs/jobToApplication.js src/models/JobSearchCache.js src/controllers/job.controller.js src/validators/job.validators.js src/routes/job.routes.js scripts/jobs-selftest.js",
     "start": "node src/server.js",
     "jobs:test": "node scripts/jobs-selftest.js",
+    "check:indexes": "node scripts/check-indexes.js",
     "seed": "node scripts/seed.js",
     "smoke": "node scripts/smoke-test.js"
   },
