@@ -1,9 +1,11 @@
 export class ApiError extends Error {
-  constructor(status, message, fieldErrors = null) {
+  constructor(status, message, fieldErrors = null, data = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.data = data;
+    this.applicationId = data?.applicationId;
   }
 }
 
@@ -43,8 +45,12 @@ async function request(path, options = {}) {
   };
 
   if (body !== undefined) {
-    fetchOptions.headers["Content-Type"] = "application/json";
-    fetchOptions.body = JSON.stringify(body);
+    if (typeof FormData !== "undefined" && body instanceof FormData) {
+      fetchOptions.body = body;
+    } else {
+      fetchOptions.headers["Content-Type"] = "application/json";
+      fetchOptions.body = JSON.stringify(body);
+    }
   }
 
   let response;
@@ -69,7 +75,11 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const status = response.status;
-    const message = data?.message || "Something went wrong";
+    const message =
+      data?.message ||
+      (status === 404
+        ? "Backend server is not running on port 5000 or API route was not found."
+        : "Something went wrong");
     const fieldErrors = data?.errors || null;
 
     const isExempt401Path =
@@ -91,7 +101,7 @@ async function request(path, options = {}) {
       unauthorizedHandler();
     }
 
-    throw new ApiError(status, message, fieldErrors);
+    throw new ApiError(status, message, fieldErrors, data);
   }
 
   return data;

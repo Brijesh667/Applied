@@ -7,6 +7,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle.js";
 import { useApplication } from "../hooks/useApplication.js";
 import { useSaveApplication } from "../hooks/useSaveApplication.js";
+import { useResumes } from "../hooks/useResumes.js";
 import {
   emptyValues,
   toFormValues,
@@ -21,6 +22,7 @@ import { PageHeader } from "../components/layout/PageHeader.jsx";
 import { BackLink } from "../components/layout/BackLink.jsx";
 import { Field } from "../components/ui/Field.jsx";
 import { Input } from "../components/ui/Input.jsx";
+import { Select } from "../components/ui/Select.jsx";
 import { Textarea } from "../components/ui/Textarea.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { Skeleton } from "../components/ui/Skeleton.jsx";
@@ -97,6 +99,30 @@ export default function ApplicationForm() {
     }
   }, [isEdit]);
 
+  // Resumes list for resume selection
+  const { data: resumesData, isError: isResumesError } = useResumes();
+  const resumesList = resumesData?.resumes || [];
+  const defaultResume = resumesList.find((r) => r.isDefault);
+  const defaultResumeId = defaultResume?._id || defaultResume?.id || "";
+  const defaultPreselectedRef = useRef(false);
+
+  // Preselect default resume on create if user has one and hasn't manually set it
+  useEffect(() => {
+    if (!isEdit && defaultResumeId && !defaultPreselectedRef.current) {
+      defaultPreselectedRef.current = true;
+      setValues((prev) => {
+        if (!prev.resumeId) {
+          initialValuesRef.current = {
+            ...initialValuesRef.current,
+            resumeId: defaultResumeId,
+          };
+          return { ...prev, resumeId: defaultResumeId };
+        }
+        return prev;
+      });
+    }
+  }, [isEdit, defaultResumeId]);
+
   // Dirty check
   const isDirty = useMemo(() => {
     const init = initialValuesRef.current;
@@ -112,7 +138,8 @@ export default function ApplicationForm() {
       values.description !== init.description ||
       values.notes !== init.notes ||
       values.jobLink !== init.jobLink ||
-      values.appliedDate !== init.appliedDate
+      values.appliedDate !== init.appliedDate ||
+      values.resumeId !== init.resumeId
     );
   }, [values]);
 
@@ -549,6 +576,54 @@ export default function ApplicationForm() {
                   onBlur={() => handleBlur("notes")}
                 />
               </Field>
+
+              {/* Resume used */}
+              {!isResumesError && (
+                <div>
+                  {resumesList.length === 0 ? (
+                    <div className="flex flex-col gap-1.5 pt-1">
+                      <span className="text-[14px] leading-[20px] font-medium text-ink select-none">
+                        Resume used (optional)
+                      </span>
+                      <p className="text-[13px] leading-[18px] text-ink-soft">
+                        No resumes saved.{" "}
+                        <Link
+                          to="/resumes"
+                          className="text-primary hover:underline font-medium"
+                        >
+                          Add a resume
+                        </Link>
+                      </p>
+                    </div>
+                  ) : (
+                    <Field
+                      id="app-resume-used"
+                      label="Resume used (optional)"
+                      hint="Select which resume you submitted with this application."
+                    >
+                      <Select
+                        id="app-resume-used"
+                        value={values.resumeId}
+                        disabled={isSaving}
+                        onChange={(e) =>
+                          handleFieldChange("resumeId", e.target.value)
+                        }
+                      >
+                        <option value="">No resume</option>
+                        {resumesList.map((r) => {
+                          const rId = r._id || r.id;
+                          return (
+                            <option key={rId} value={rId}>
+                              {r.label || r.fileName}{" "}
+                              {r.isDefault ? "(Default)" : ""}
+                            </option>
+                          );
+                        })}
+                      </Select>
+                    </Field>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

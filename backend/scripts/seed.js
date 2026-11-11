@@ -38,12 +38,12 @@ async function seed() {
 
   console.log("Connected to MongoDB. Seeding database...");
 
-  const demoEmail = process.env.SEED_EMAIL || "demo@example.com";
+  const demoEmail = process.env.SEED_EMAIL;
   const demoPassword = process.env.SEED_PASSWORD;
   const demoName = process.env.SEED_NAME || "Demo User";
 
-  if (!demoPassword) {
-    console.error("ERROR: SEED_PASSWORD environment variable is required.");
+  if (!demoEmail || !demoPassword) {
+    console.error("ERROR: SEED_EMAIL and SEED_PASSWORD environment variables are required.");
     process.exit(1);
   }
 

@@ -7,17 +7,16 @@ import MongoStore from "connect-mongo";
 import config from "./config/env.js";
 import authRoutes from "./routes/auth.routes.js";
 import applicationRoutes from "./routes/application.routes.js";
+import resumeRoutes from "./routes/resume.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
+import jobRoutes from "./routes/job.routes.js";
 import { apiLimiter } from "./middleware/rateLimiters.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 
 app.set("query parser", "extended");
-
-if (config.isProduction) {
-  app.set("trust proxy", config.trustProxyHops);
-}
+app.set("trust proxy", config.trustProxy);
 
 // Middlewares
 app.use(helmet());
@@ -62,7 +61,9 @@ app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/applications", applicationRoutes);
+app.use("/api/resumes", resumeRoutes);
 app.use("/api/stats", statsRoutes);
+app.use("/api/jobs", jobRoutes);
 
 // 404 handler for unknown routes
 app.use((req, res) => {

@@ -1,11 +1,18 @@
 import mongoose from "mongoose";
 import Application from "../models/Application.js";
+import Resume from "../models/Resume.js";
 import { LIMITS } from "../config/constants.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
 
 export const createApplication = asyncHandler(async (req, res) => {
   const userId = req.session.userId;
+  if (req.body.resumeId) {
+    const resume = await Resume.findOne({ _id: req.body.resumeId, userId });
+    if (!resume) {
+      return res.status(400).json({ message: "Resume not found" });
+    }
+  }
   const application = await Application.create({
     ...req.body,
     userId,
@@ -226,6 +233,13 @@ export const updateApplication = asyncHandler(async (req, res) => {
   const application = await Application.findOne({ _id: id, userId });
   if (!application) {
     return res.status(404).json({ message: "Application not found" });
+  }
+
+  if (req.body.resumeId) {
+    const resume = await Resume.findOne({ _id: req.body.resumeId, userId });
+    if (!resume) {
+      return res.status(400).json({ message: "Resume not found" });
+    }
   }
 
   if (req.body.pay) {

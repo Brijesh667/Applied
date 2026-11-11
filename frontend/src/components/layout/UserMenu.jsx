@@ -85,6 +85,20 @@ export function UserMenu() {
           Applications
         </MenuItem>
 
+        <MenuItem
+          onClick={() => navigate("/jobs")}
+          className="min-h-[44px]"
+        >
+          Jobs
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => navigate("/resumes")}
+          className="min-h-[44px]"
+        >
+          Resumes
+        </MenuItem>
+
         <MenuDivider />
 
         {/* Log out */}

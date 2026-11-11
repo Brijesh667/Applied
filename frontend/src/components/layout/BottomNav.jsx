@@ -16,7 +16,7 @@
  */
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Plus, Briefcase } from "lucide-react";
+import { LayoutDashboard, Plus, Briefcase, Compass, FileText } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import { useInteractiveButton } from "../../hooks/useInteractiveButton.js";
 
@@ -33,7 +33,7 @@ function BottomNavItem({ to, isActive, icon: Icon, label, prefetch }) {
       onTouchStart={prefetch}
       onFocus={prefetch}
       className={cn(
-        "btn-interactive flex-1 h-full min-h-[44px] flex flex-col items-center justify-center relative py-1 px-2 select-none",
+        "btn-interactive flex-1 h-full min-h-[44px] flex flex-col items-center justify-center relative py-1 px-1 sm:px-2 select-none",
         "transition-all duration-150 motion-reduce:transition-none motion-reduce:transform-none",
         "focus:outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px]",
         isActive
@@ -46,7 +46,7 @@ function BottomNavItem({ to, isActive, icon: Icon, label, prefetch }) {
       <span ref={rippleRef} className="btn-ripple-container" aria-hidden="true" />
       <span className="relative z-[2] flex flex-col items-center justify-center gap-0.5 pointer-events-none">
         <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
-        <span className="text-[11px] leading-[14px] truncate">{label}</span>
+        <span className="text-[10.5px] leading-[13px] truncate">{label}</span>
       </span>
     </Link>
   );
@@ -60,6 +60,8 @@ export function BottomNav() {
   const isAddActive = pathname === "/applications/new";
   const isApplicationsActive =
     pathname.startsWith("/applications") && pathname !== "/applications/new";
+  const isJobsActive = pathname.startsWith("/jobs");
+  const isResumesActive = pathname.startsWith("/resumes");
 
   const prefetchDashboard = () => {
     import("../../pages/Dashboard.jsx");
@@ -71,6 +73,14 @@ export function BottomNav() {
 
   const prefetchApplications = () => {
     import("../../pages/Applications.jsx");
+  };
+
+  const prefetchJobs = () => {
+    import("../../pages/Jobs.jsx");
+  };
+
+  const prefetchResumes = () => {
+    import("../../pages/Resumes.jsx");
   };
 
   return (
@@ -101,6 +111,22 @@ export function BottomNav() {
           icon={Briefcase}
           label="Applications"
           prefetch={prefetchApplications}
+        />
+
+        <BottomNavItem
+          to="/jobs"
+          isActive={isJobsActive}
+          icon={Compass}
+          label="Jobs"
+          prefetch={prefetchJobs}
+        />
+
+        <BottomNavItem
+          to="/resumes"
+          isActive={isResumesActive}
+          icon={FileText}
+          label="Resumes"
+          prefetch={prefetchResumes}
         />
       </div>
     </nav>

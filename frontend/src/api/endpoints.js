@@ -55,8 +55,52 @@ export const statsApi = {
   },
 };
 
+export const resumesApi = {
+  list: async () => {
+    return api.get("/resumes");
+  },
+  get: async (id) => {
+    const res = await api.get(`/resumes/${id}`);
+    return res?.resume ?? res;
+  },
+  upload: async (formData) => {
+    return api.post("/resumes", { body: formData });
+  },
+  update: async (id, body) => {
+    return api.patch(`/resumes/${id}`, { body });
+  },
+  reparse: async (id) => {
+    return api.post(`/resumes/${id}/reparse`);
+  },
+  download: async (id) => {
+    return api.get(`/resumes/${id}/download`);
+  },
+  remove: async (id) => {
+    return api.delete(`/resumes/${id}`);
+  },
+};
+
+export const jobsApi = {
+  search: async ({ resumeId, filters, refresh = false }) => {
+    return api.post("/jobs/search", { body: { resumeId, filters, refresh } });
+  },
+  getLatest: async (resumeId) => {
+    return api.get("/jobs/searches/latest", {
+      params: resumeId ? { resumeId } : {},
+    });
+  },
+  getSearchJobs: async (searchId, params = {}) => {
+    return api.get(`/jobs/searches/${searchId}/jobs`, { params });
+  },
+  track: async ({ resumeId, jobId }) => {
+    return api.post("/jobs/track", { body: { resumeId, jobId } });
+  },
+};
+
 export default {
   auth: authApi,
   applications: applicationsApi,
   stats: statsApi,
+  resumes: resumesApi,
+  jobs: jobsApi,
 };

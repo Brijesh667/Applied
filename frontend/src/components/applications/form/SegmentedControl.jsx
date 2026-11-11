@@ -61,7 +61,7 @@ export function SegmentedControl({
           name={name}
           opt={opt}
           isSelected={opt.value === value}
-          disabled={disabled}
+          disabled={disabled || Boolean(opt.disabled)}
           onChange={onChange}
         />
       ))}

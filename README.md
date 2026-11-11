@@ -151,6 +151,12 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
+## Deployment
+
+For production deployment guides, environment variable references, reverse-proxy setup, and post-deploy checklists, see [docs/DEPLOY.md](docs/DEPLOY.md).
+
+---
+
 ## Verification & Quality Assurance
 
 - **Linting**: Run `npm run lint` inside `frontend/` (0 errors, 0 warnings).

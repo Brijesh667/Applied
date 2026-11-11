@@ -23,6 +23,7 @@ import { LandingHero } from "../components/landing/LandingHero.jsx";
 import { LandingProblemSolution } from "../components/landing/LandingProblemSolution.jsx";
 import { LandingHowItWorks } from "../components/landing/LandingHowItWorks.jsx";
 import { LandingFAQ } from "../components/landing/LandingFAQ.jsx";
+import { LandingClosing } from "../components/landing/LandingClosing.jsx";
 import { LandingFooter } from "../components/landing/LandingFooter.jsx";
 import { AuthDialog } from "../components/auth/AuthDialog.jsx";
 
@@ -102,6 +103,8 @@ export default function Landing() {
         <LandingHowItWorks />
 
         <LandingFAQ />
+
+        <LandingClosing onOpenRegister={handleOpenRegister} />
       </main>
 
       {/* Footer */}

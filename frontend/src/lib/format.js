@@ -14,6 +14,8 @@ export function formatDate(iso) {
 
 export function formatPay(pay) {
   if (!pay || typeof pay.amount !== "number") return "";
+  // Applications tracked from job listings without compensation default to pay.amount = 0 ("Not specified")
+  if (pay.amount === 0) return "Not specified";
   const formatted = new Intl.NumberFormat("en-IN").format(pay.amount);
   const label = PAY_LABELS[pay.type] || pay.type || "";
   return `${CURRENCY}${formatted} ${label}`.trim();
@@ -95,4 +97,15 @@ export function splitSkills(str) {
     .split(",")
     .map(normalizeText)
     .filter((skill) => skill.length > 0);
+}
+
+export function formatBytes(bytes) {
+  if (typeof bytes !== "number" || isNaN(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  }
+  const mb = kb / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }

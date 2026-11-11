@@ -1,39 +1,46 @@
 /**
  * LandingNavbar component
- * Sticky topbar for Landing Page v3:
+ * Sticky topbar for Landing Page:
  * - Uses --topbar-h (h-14 mobile, h-16 desktop)
  * - Left: Wordmark "Applied" (link to top)
- * - Center (md+): Anchor links "Features" (#solution), "How it works" (#how), "FAQ" (#faq)
- * - Right: Theme toggle + "Start tracking" button (compact "Start" on mobile)
- * - Mobile: Theme toggle + compact Start + menu button for anchor links
- * - Sliding indicator for active section with IntersectionObserver
- * - Zero auth links on landing page
+ * - Center (md+): Anchor links "Features" (#solution), "How it works" (#how), "FAQ" (#faq) with Aceternity sliding pill effect
+ * - Right: Theme toggle + Sign in button
+ * - Mobile: Theme toggle + Sign in + menu button for anchor links
+ * - Animated sliding pill indicator for active section with smooth scroll & scroll-spy
+ * - Respects prefers-reduced-motion
  */
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { Sun, Moon, Menu as MenuIcon, X } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext.jsx";
 import { Logo } from "../ui/Logo.jsx";
+import { SignInButton } from "../ui/SignInButton.jsx";
 import { navContent } from "../../lib/landingContent.js";
 import { cn } from "../../lib/cn.js";
+
+const SECTION_IDS = ["solution", "how", "faq"];
 
 export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
   const handleAuth = onOpenAuth || onOpenRegister;
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
 
-  const [activeSection, setActiveSection] = useState(null);
+  const getInitialSection = () => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hashId = window.location.hash.replace(/^#/, "");
+      if (SECTION_IDS.includes(hashId)) {
+        return hashId;
+      }
+    }
+    return "solution";
+  };
+
+  const [activeSection, setActiveSection] = useState(getInitialSection);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
-  // Measure active anchor link for the sliding indicator
-  const navRef = useRef(null);
-  const linksRef = useRef({});
-  const [indicatorStyle, setIndicatorStyle] = useState({
-    left: 0,
-    width: 0,
-    opacity: 0,
-  });
-  const [isReady, setIsReady] = useState(false);
+  const isClickScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -43,95 +50,118 @@ export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Update sliding indicator position
-  const updateIndicator = useCallback(() => {
-    if (!activeSection || !navRef.current) {
-      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
-      return;
-    }
-
-    const targetEl = linksRef.current[activeSection];
-    if (targetEl && navRef.current) {
-      const navRect = navRef.current.getBoundingClientRect();
-      const targetRect = targetEl.getBoundingClientRect();
-
-      setIndicatorStyle({
-        left: targetRect.left - navRect.left,
-        width: targetRect.width,
-        opacity: 1,
-      });
-      setIsReady(true);
-    } else {
-      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
-    }
-  }, [activeSection]);
-
+  // Real-time scroll spy that updates active navigation pill as user scrolls
   useEffect(() => {
-    updateIndicator();
-  }, [updateIndicator]);
+    let rafId = null;
 
-  // Handle window resize & font loading
-  useEffect(() => {
-    const handleResize = () => updateIndicator();
-    window.addEventListener("resize", handleResize);
-    if (document.fonts?.ready) {
-      document.fonts.ready.then(updateIndicator);
-    }
-    return () => window.removeEventListener("resize", handleResize);
-  }, [updateIndicator]);
+    const onScroll = () => {
+      if (isClickScrollingRef.current) return;
 
-  // Section observer for active anchor highlight
-  useEffect(() => {
-    const sectionIds = ["solution", "how", "faq"];
-    const elements = sectionIds
-      .map((id) => document.getElementById(id))
-      .filter(Boolean);
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const scrollY = window.scrollY;
+        const viewportHeight = window.innerHeight;
+        const docHeight = document.documentElement.scrollHeight;
 
-    if (elements.length === 0 || typeof window === "undefined" || !("IntersectionObserver" in window)) return;
+        // If at or near bottom of page, activate last tab (faq)
+        if (scrollY + viewportHeight >= docHeight - 80) {
+          setActiveSection("faq");
+          return;
+        }
 
-    const observer = new window.IntersectionObserver(
-      (entries) => {
-        // Find visible section closest to top
-        const visible = entries.filter((e) => e.isIntersecting);
-        if (visible.length > 0) {
-          // Sort by distance to topbar
-          visible.sort(
-            (a, b) =>
-              Math.abs(a.boundingClientRect.top) -
-              Math.abs(b.boundingClientRect.top)
-          );
-          setActiveSection(visible[0].target.id);
-        } else {
-          // If scrolled above first section
-          const firstTop = elements[0].getBoundingClientRect().top;
-          if (firstTop > 200) {
-            setActiveSection(null);
+        const navOffset = 140; // Detection threshold below navbar
+
+        const sections = SECTION_IDS.map((id) => {
+          const el = document.getElementById(id);
+          if (!el) return null;
+          const rect = el.getBoundingClientRect();
+          return {
+            id,
+            top: rect.top + window.scrollY,
+          };
+        }).filter(Boolean);
+
+        if (sections.length === 0) return;
+
+        // If above solution section (hero area), keep Features active
+        if (scrollY + navOffset < sections[0].top) {
+          setActiveSection("solution");
+          return;
+        }
+
+        // Determine which section currently occupies the viewport
+        let current = sections[0].id;
+        for (let i = 0; i < sections.length; i++) {
+          if (scrollY + navOffset >= sections[i].top) {
+            current = sections[i].id;
           }
         }
-      },
-      {
-        rootMargin: "-20% 0px -50% 0px",
-        threshold: [0, 0.2, 0.5],
-      }
-    );
+        setActiveSection(current);
+      });
+    };
 
-    elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+
+    // Initial check on mount
+    onScroll();
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
   }, []);
 
   const handleScrollTo = (e, href) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setMobileMenuOpen(false);
+
     const targetId = href.replace(/^#/, "");
+    // 1. Immediately slide tab pill to the clicked tab
+    setActiveSection(targetId);
+
+    // 2. Lock scroll spy so it doesn't fight the user's click during animation
+    isClickScrollingRef.current = true;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+
     const targetEl = document.getElementById(targetId);
     if (targetEl) {
-      targetEl.scrollIntoView({
+      const navHeight = 64; // height of sticky topbar
+      const targetY = targetEl.getBoundingClientRect().top + window.scrollY - navHeight;
+
+      window.scrollTo({
+        top: Math.max(0, targetY),
         behavior: prefersReducedMotion ? "auto" : "smooth",
       });
-      // Set hash without jump
+
+      // Update URL hash without causing an instant browser jump
       window.history.pushState(null, "", href);
-      setActiveSection(targetId);
     }
+
+    // 3. Release scroll lock after smooth scroll animation completes
+    scrollTimeoutRef.current = setTimeout(() => {
+      isClickScrollingRef.current = false;
+    }, 850);
+  };
+
+  const handleLogoClick = (e) => {
+    e.preventDefault();
+    setActiveSection("solution");
+    isClickScrollingRef.current = true;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
+
+    window.history.pushState(null, "", window.location.pathname);
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      isClickScrollingRef.current = false;
+    }, 850);
   };
 
   return (
@@ -141,15 +171,7 @@ export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
         <div className="flex items-center justify-start">
           <a
             href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              window.scrollTo({
-                top: 0,
-                behavior: prefersReducedMotion ? "auto" : "smooth",
-              });
-              window.history.pushState(null, "", window.location.pathname);
-              setActiveSection(null);
-            }}
+            onClick={handleLogoClick}
             className="focus:outline-none focus-visible:outline-2 focus-visible:outline-primary rounded-[6px]"
             aria-label="Applied home"
           >
@@ -157,12 +179,11 @@ export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
           </a>
         </div>
 
-        {/* Center: Desktop Anchor Links (md+) */}
+        {/* Center: Desktop Anchor Links with Aceternity sliding pill effect */}
         <div className="hidden md:flex items-center justify-center relative">
           <nav
-            ref={navRef}
             aria-label="Page navigation"
-            className="flex items-center gap-8 relative py-2"
+            className="flex items-center gap-1.5 p-1 rounded-full bg-sunken/60 dark:bg-zinc-800/40 border border-rule/50"
           >
             {navContent.links.map((link) => {
               const sectionId = link.href.replace(/^#/, "");
@@ -171,47 +192,35 @@ export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
               return (
                 <a
                   key={link.href}
-                  ref={(el) => {
-                    linksRef.current[sectionId] = el;
-                  }}
                   href={link.href}
                   onClick={(e) => handleScrollTo(e, link.href)}
                   aria-current={isActive ? "true" : undefined}
                   className={cn(
-                    "relative px-3 py-2 text-[14px] leading-[20px] transition-colors duration-150 rounded-[6px] focus:outline-none focus-visible:outline-2 focus-visible:outline-primary",
+                    "relative px-4 py-1.5 text-[14px] leading-none transition-colors duration-150 rounded-full focus:outline-none focus-visible:outline-2 focus-visible:outline-primary select-none cursor-pointer",
                     isActive
                       ? "font-semibold text-ink"
-                      : "font-normal text-ink-soft hover:text-ink"
+                      : "font-medium text-ink-soft hover:text-ink"
                   )}
                 >
-                  {/* Reserve bold width */}
-                  <span className="font-semibold invisible select-none h-0 block overflow-hidden" aria-hidden="true">
-                    {link.label}
-                  </span>
-                  <span>{link.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="landing-active-tab"
+                      transition={
+                        prefersReducedMotion
+                          ? { duration: 0 }
+                          : { type: "spring", bounce: 0.25, duration: 0.5 }
+                      }
+                      className="absolute inset-0 bg-surface dark:bg-zinc-700/80 rounded-full shadow-xs border border-rule/70"
+                    />
+                  )}
+                  <span className="relative z-10 block">{link.label}</span>
                 </a>
               );
             })}
-
-            {/* Sliding 2px primary active indicator line */}
-            <div
-              aria-hidden="true"
-              style={{
-                transform: `translateX(${indicatorStyle.left}px)`,
-                width: `${indicatorStyle.width}px`,
-                opacity: indicatorStyle.opacity,
-              }}
-              className={cn(
-                "absolute -bottom-2 md:-bottom-3 left-0 h-[2px] bg-primary pointer-events-none",
-                !isReady || prefersReducedMotion
-                  ? "transition-none"
-                  : "transition-[transform,width,opacity] duration-250 ease-out"
-              )}
-            />
           </nav>
         </div>
 
-        {/* Right: Theme Toggle & CTA */}
+        {/* Right: Theme Toggle & Sign in */}
         <div className="flex items-center justify-end gap-2.5 sm:gap-3">
           {/* Theme Toggle */}
           <button
@@ -235,14 +244,8 @@ export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
             )}
           </button>
 
-          {/* Sign in: normal text, turns blue (primary) on hover */}
-          <button
-            type="button"
-            onClick={handleAuth}
-            className="px-3 py-1.5 text-[14px] leading-[20px] font-medium text-ink hover:text-primary transition-colors rounded-[6px] cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-primary select-none shrink-0"
-          >
-            {navContent.signIn}
-          </button>
+          {/* Sign in button with smooth sweep & roll hover effect */}
+          <SignInButton onClick={handleAuth} className="shrink-0" />
 
           {/* Mobile Menu Toggle Button (below md) */}
           <button
@@ -291,16 +294,13 @@ export function LandingNavbar({ onOpenAuth, onOpenRegister }) {
             })}
 
             <div className="pt-2 mt-1 border-t border-rule/50">
-              <button
-                type="button"
+              <SignInButton
                 onClick={() => {
                   setMobileMenuOpen(false);
                   handleAuth();
                 }}
-                className="w-full px-3 py-2 rounded-[6px] text-[14px] font-medium text-left text-ink hover:bg-sunken hover:text-primary transition-colors cursor-pointer"
-              >
-                {navContent.signIn}
-              </button>
+                className="w-full"
+              />
             </div>
           </nav>
         </div>

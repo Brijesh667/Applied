@@ -5,19 +5,13 @@
  *
  * Features:
  * - Clean wordmark logo (link to /dashboard, no dot/swipe).
- * - Nav links Dashboard & Applications with layout-shift-free font weight transition.
- * - Sliding 2px primary active indicator line along header bottom edge (250ms ease-out).
+ * - Animated sliding pill tab navigation (Aceternity UI tabs style with motion layoutId).
  * - Animated 2px primary progress line along header top edge on route change (350ms ease-out).
  * - Respects prefers-reduced-motion, WCAG AA, and maintains exact --topbar-h.
  */
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useLayoutEffect,
-  useCallback,
-} from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import { motion } from "motion/react";
 import { Sun, Moon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "../../context/ThemeContext.jsx";
@@ -25,7 +19,7 @@ import { APP_NAME } from "../../lib/brand.js";
 import { statsApi } from "../../api/endpoints.js";
 import { queryKeys } from "../../api/queryKeys.js";
 import { Logo } from "../ui/Logo.jsx";
-import { Button } from "../ui/Button.jsx";
+import { ShimmerButton } from "../../registry/buttons/shimmer-button.jsx";
 import { UserMenu } from "./UserMenu.jsx";
 import { cn } from "../../lib/cn.js";
 
@@ -41,25 +35,18 @@ export function TopBar() {
   const isApplicationsActive =
     normalizedPath.startsWith("/applications") &&
     normalizedPath !== "/applications/new";
+  const isJobsActive = normalizedPath.startsWith("/jobs");
+  const isResumesActive = normalizedPath.startsWith("/resumes");
 
   const activeNav = isDashboardActive
     ? "dashboard"
     : isApplicationsActive
     ? "applications"
+    : isJobsActive
+    ? "jobs"
+    : isResumesActive
+    ? "resumes"
     : null;
-
-  // Refs for sliding indicator
-  const navRef = useRef(null);
-  const dashboardRef = useRef(null);
-  const applicationsRef = useRef(null);
-
-  // Indicator measurement state
-  const [indicatorStyle, setIndicatorStyle] = useState({
-    left: 0,
-    width: 0,
-    opacity: 0,
-  });
-  const [isReady, setIsReady] = useState(false);
 
   // Prefers reduced motion detection
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -85,62 +72,6 @@ export function TopBar() {
     setProgressKey((prev) => prev + 1);
   }, [location.pathname, location.search]);
 
-  // Recalculate indicator position and width
-  const updateIndicator = useCallback(() => {
-    let targetEl = null;
-    if (activeNav === "dashboard") {
-      targetEl = dashboardRef.current;
-    } else if (activeNav === "applications") {
-      targetEl = applicationsRef.current;
-    }
-
-    if (targetEl && navRef.current) {
-      const navRect = navRef.current.getBoundingClientRect();
-      const targetRect = targetEl.getBoundingClientRect();
-
-      if (targetRect.width > 0) {
-        setIndicatorStyle({
-          left: targetRect.left - navRect.left,
-          width: targetRect.width,
-          opacity: 1,
-        });
-        return;
-      }
-    }
-
-    setIndicatorStyle((prev) => ({
-      ...prev,
-      opacity: 0,
-    }));
-  }, [activeNav]);
-
-  // Initial and route-change measurement
-  useLayoutEffect(() => {
-    updateIndicator();
-    // Enable sliding transitions after initial mount placement
-    const timer = requestAnimationFrame(() => {
-      setIsReady(true);
-    });
-    return () => cancelAnimationFrame(timer);
-  }, [updateIndicator]);
-
-  // Resize and font-load measurement
-  useEffect(() => {
-    const handleResize = () => {
-      updateIndicator();
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    if (document.fonts?.ready) {
-      document.fonts.ready.then(updateIndicator);
-    }
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [updateIndicator]);
-
   // Prefetch handlers
   const prefetchDashboard = () => {
     import("../../pages/Dashboard.jsx");
@@ -155,9 +86,55 @@ export function TopBar() {
     import("../../pages/Applications.jsx");
   };
 
+  const prefetchJobs = () => {
+    import("../../pages/Jobs.jsx");
+  };
+
+  const prefetchResumes = () => {
+    import("../../pages/Resumes.jsx");
+  };
+
   const prefetchNewApplication = () => {
     import("../../pages/ApplicationForm.jsx");
   };
+
+  const navTabs = useMemo(
+    () => [
+      {
+        id: "dashboard",
+        label: "Dashboard",
+        to: "/dashboard",
+        end: true,
+        isActive: isDashboardActive,
+        prefetch: prefetchDashboard,
+      },
+      {
+        id: "applications",
+        label: "Applications",
+        to: "/applications",
+        end: false,
+        isActive: isApplicationsActive,
+        prefetch: prefetchApplications,
+      },
+      {
+        id: "jobs",
+        label: "Jobs",
+        to: "/jobs",
+        end: false,
+        isActive: isJobsActive,
+        prefetch: prefetchJobs,
+      },
+      {
+        id: "resumes",
+        label: "Resumes",
+        to: "/resumes",
+        end: false,
+        isActive: isResumesActive,
+        prefetch: prefetchResumes,
+      },
+    ],
+    [isDashboardActive, isApplicationsActive, isJobsActive, isResumesActive]
+  );
 
   return (
     <header className="sticky top-0 z-40 w-full h-14 md:h-16 bg-paper border-b border-rule select-none relative">
@@ -185,82 +162,45 @@ export function TopBar() {
           </Link>
         </div>
 
-        {/* Zone 2 (Center): Truly centered desktop navigation (hidden on mobile) */}
+        {/* Zone 2 (Center): Centered desktop navigation with Aceternity sliding pill effect */}
         <nav
-          ref={navRef}
           aria-label="Main"
           className="hidden md:flex items-center justify-center h-full relative"
         >
-          <div className="flex items-center gap-8 h-full">
-            <NavLink
-              ref={dashboardRef}
-              to="/dashboard"
-              end
-              aria-current={isDashboardActive ? "page" : undefined}
-              onMouseEnter={prefetchDashboard}
-              onFocus={prefetchDashboard}
-              className="relative flex items-center px-3 py-2 text-[15px] leading-none select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 rounded-[6px]"
-            >
-              <span className="grid place-items-center">
-                {/* Invisible font-semibold copy reserves width, preventing layout shift on weight change */}
-                <span className="invisible font-semibold block" aria-hidden="true">
-                  Dashboard
-                </span>
-                <span
+          <div className="flex items-center gap-1.5 p-1 rounded-full bg-sunken/60 dark:bg-zinc-800/40 border border-rule/50">
+            {navTabs.map((tab) => {
+              const isActive = activeNav === tab.id;
+              return (
+                <NavLink
+                  key={tab.id}
+                  to={tab.to}
+                  end={tab.end}
+                  aria-current={isActive ? "page" : undefined}
+                  onMouseEnter={tab.prefetch}
+                  onFocus={tab.prefetch}
                   className={cn(
-                    "col-start-1 row-start-1 block transition-colors duration-150",
-                    isDashboardActive
+                    "relative px-4 py-1.5 text-[14px] leading-none select-none rounded-full transition-colors duration-150 focus:outline-none focus-visible:outline-2 focus-visible:outline-primary",
+                    isActive
                       ? "font-semibold text-ink"
                       : "font-medium text-ink-soft hover:text-ink"
                   )}
                 >
-                  Dashboard
-                </span>
-              </span>
-            </NavLink>
-
-            <NavLink
-              ref={applicationsRef}
-              to="/applications"
-              aria-current={isApplicationsActive ? "page" : undefined}
-              onMouseEnter={prefetchApplications}
-              onFocus={prefetchApplications}
-              className="relative flex items-center px-3 py-2 text-[15px] leading-none select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 rounded-[6px]"
-            >
-              <span className="grid place-items-center">
-                {/* Invisible font-semibold copy reserves width, preventing layout shift on weight change */}
-                <span className="invisible font-semibold block" aria-hidden="true">
-                  Applications
-                </span>
-                <span
-                  className={cn(
-                    "col-start-1 row-start-1 block transition-colors duration-150",
-                    isApplicationsActive
-                      ? "font-semibold text-ink"
-                      : "font-medium text-ink-soft hover:text-ink"
+                  {isActive && (
+                    <motion.div
+                      layoutId="topbar-active-tab"
+                      transition={
+                        prefersReducedMotion
+                          ? { duration: 0 }
+                          : { type: "spring", bounce: 0.25, duration: 0.5 }
+                      }
+                      className="absolute inset-0 bg-surface dark:bg-zinc-700/80 rounded-full shadow-xs border border-rule/70"
+                    />
                   )}
-                >
-                  Applications
-                </span>
-              </span>
-            </NavLink>
+                  <span className="relative z-10 block">{tab.label}</span>
+                </NavLink>
+              );
+            })}
           </div>
-
-          {/* Sliding 2px primary active indicator */}
-          <span
-            aria-hidden="true"
-            className={cn(
-              "absolute bottom-0 left-0 h-[2px] bg-primary pointer-events-none",
-              prefersReducedMotion || !isReady
-                ? "transition-none"
-                : "transition-[transform,width,opacity] duration-[250ms] ease-[cubic-bezier(0.2,0.7,0.2,1)]"
-            )}
-            style={{
-              transform: `translateX(${indicatorStyle.left}px)`,
-              width: `${indicatorStyle.width}px`,
-              opacity: indicatorStyle.opacity,
-            }}
-          />
         </nav>
 
         {/* Zone 3 (Right): Actions (justify-end, gap 12px) */}
@@ -273,9 +213,9 @@ export function TopBar() {
             onMouseEnter={prefetchNewApplication}
             onFocus={prefetchNewApplication}
           >
-            <Button size="sm">
-              Add application
-            </Button>
+            <ShimmerButton className="shadow-lg h-8 px-3.5 text-sm font-medium">
+              <span className="text-sm font-medium text-white">Add application</span>
+            </ShimmerButton>
           </Link>
 
           {/* Theme toggle: icon button on mobile and desktop */}

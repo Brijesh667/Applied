@@ -23,6 +23,7 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly",
         fetch: "readonly",
+        FormData: "readonly",
         URL: "readonly",
         URLSearchParams: "readonly",
         AbortController: "readonly",

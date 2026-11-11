@@ -206,6 +206,7 @@ export function MenuItem({
   disabled = false,
   className = "",
   danger = false,
+  icon: Icon,
 }) {
   const { closeMenu } = useContext(MenuContext);
 
@@ -237,7 +238,10 @@ export function MenuItem({
       {...handlers}
     >
       <span ref={rippleRef} className="btn-ripple-container" aria-hidden="true" />
-      <span className="relative z-[2] inline-flex items-center w-full min-w-0">
+      <span className="relative z-[2] inline-flex items-center gap-2.5 w-full min-w-0">
+        {Icon && (
+          <Icon className="w-4 h-4 shrink-0 text-current opacity-80" aria-hidden="true" />
+        )}
         <span className="truncate">{children}</span>
       </span>
     </button>
