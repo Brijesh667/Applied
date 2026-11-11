@@ -34,6 +34,8 @@ const envSchema = z
     CAREERJET_API_KEY: z.string().optional(),
     CAREERJET_LOCALE: z.string().default("en_IN"),
     JOB_PROVIDERS: z.string().optional(),
+    JOB_SEARCH_DAILY_LIMIT: z.coerce.number().int().positive().default(5),
+    JOB_SEARCH_DAILY_WINDOW_HOURS: z.coerce.number().positive().default(24),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
@@ -245,6 +247,8 @@ export const config = {
   careerjetApiKey: parsed.data.CAREERJET_API_KEY,
   careerjetLocale: parsed.data.CAREERJET_LOCALE,
   jobProvidersRaw: parsed.data.JOB_PROVIDERS,
+  jobSearchDailyLimit: parsed.data.JOB_SEARCH_DAILY_LIMIT,
+  jobSearchDailyWindowMs: parsed.data.JOB_SEARCH_DAILY_WINDOW_HOURS * 60 * 60 * 1000,
   enabledJobProviders,
   isAdzunaConfigured: enabledJobProviders.includes("adzuna"),
   isJSearchConfigured: enabledJobProviders.includes("jsearch"),

@@ -4,6 +4,7 @@ import {
   jobSearchLimiter,
   jobTrackLimiter,
 } from "../middleware/rateLimiters.js";
+import { dailySearchLimit } from "../middleware/dailySearchLimit.js";
 import {
   validateJobSearch,
   validateJobTrack,
@@ -19,7 +20,14 @@ import {
 
 const router = express.Router();
 
-router.post("/search", isAuthenticated, jobSearchLimiter, validateJobSearch, searchJobs);
+router.post(
+  "/search",
+  jobSearchLimiter,
+  isAuthenticated,
+  dailySearchLimit,
+  validateJobSearch,
+  searchJobs
+);
 router.get("/searches/latest", isAuthenticated, validateGetLatestSearchQuery, getLatestSearch);
 router.get("/searches/:searchId/jobs", isAuthenticated, validateGetSearchJobsQuery, getSearchJobs);
 router.post("/track", isAuthenticated, jobTrackLimiter, validateJobTrack, trackJob);

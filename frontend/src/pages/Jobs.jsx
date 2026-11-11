@@ -33,6 +33,20 @@ import { DidYouApplyDialog } from "../components/jobs/DidYouApplyDialog.jsx";
 import { usePendingApply } from "../hooks/usePendingApply.js";
 
 /**
+ * Format reset date/time into the user's local time string.
+ */
+function formatResetTime(resetAt) {
+  if (!resetAt) return null;
+  const d = new Date(resetAt);
+  if (isNaN(d.getTime())) return null;
+  const isToday = d.toDateString() === new Date().toDateString();
+  const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return isToday
+    ? timeStr
+    : `${d.toLocaleDateString([], { month: "short", day: "numeric" })} at ${timeStr}`;
+}
+
+/**
  * Map API error to short user-friendly messages.
  */
 function mapJobSearchError(error) {
@@ -44,7 +58,9 @@ function mapJobSearchError(error) {
     return "Resume not found.";
   }
   if (status === 429) {
-    return "Search limit reached. Please try again later.";
+    const resetTime = formatResetTime(error?.data?.resetAt);
+    const msg = error?.data?.message || "Search limit reached. Please try again later.";
+    return resetTime ? `${msg} Resets at ${resetTime}.` : msg;
   }
   if (status === 502 || status === 503) {
     return "Job search providers are unavailable. Try again in a few minutes.";
@@ -325,9 +341,35 @@ export default function Jobs() {
 
   const isSearching = runSearchMutation.isPending;
 
+  // Rolling 24h search quota calculation
+  const quota = useMemo(() => {
+    if (runSearchMutation.error?.status === 429) {
+      return {
+        remaining: 0,
+        limit: runSearchMutation.error?.data?.limit || 5,
+      };
+    }
+    if (typeof runSearchMutation.data?.remaining === "number") {
+      return {
+        remaining: runSearchMutation.data.remaining,
+        limit: runSearchMutation.data.dailyLimit || 5,
+      };
+    }
+    if (typeof latestData?.remaining === "number") {
+      return {
+        remaining: latestData.remaining,
+        limit: latestData.dailyLimit || 5,
+      };
+    }
+    return {
+      remaining: 5,
+      limit: 5,
+    };
+  }, [runSearchMutation.data, runSearchMutation.error, latestData]);
+
   // Execute search (new or refresh)
   const handleSearch = async (refresh = false) => {
-    if (!selectedResume || isSearching) return;
+    if (!selectedResume || isSearching || quota.remaining === 0) return;
     setSearchParams({ resume: activeResumeId }, { replace: true });
     setFilterError400(false);
     setIsCollapsed(true);
@@ -343,9 +385,17 @@ export default function Jobs() {
       if (refresh && res?.cached) {
         toast("Results are still fresh");
       }
-    } catch {
+    } catch (err) {
       // Re-open form if search failed
       setIsCollapsed(false);
+
+      if (err?.status === 429) {
+        const resetStr = formatResetTime(err?.data?.resetAt);
+        const msg =
+          err?.data?.message ||
+          "Search limit reached. Please try again later.";
+        toast.error(resetStr ? `${msg} Resets at ${resetStr}.` : msg);
+      }
     }
   };
 
@@ -481,6 +531,8 @@ export default function Jobs() {
             isCollapsed={isCollapsed}
             onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
             disabled={!hasSufficientCriteria || isPending}
+            searchesRemaining={quota.remaining}
+            searchesLimit={quota.limit}
             serverError={
               runSearchMutation.isError
                 ? mapJobSearchError(runSearchMutation.error)

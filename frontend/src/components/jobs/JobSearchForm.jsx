@@ -35,6 +35,8 @@ export function JobSearchForm({
   isCollapsed = false,
   onToggleCollapse,
   disabled = false,
+  searchesRemaining = 5,
+  searchesLimit = 5,
   serverError = null,
   className = "",
 }) {
@@ -56,7 +58,7 @@ export function JobSearchForm({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (disabled || isSearching) return;
+    if (disabled || isSearching || searchesRemaining === 0) return;
 
     // Validate fields locally
     const errors = {};
@@ -118,8 +120,19 @@ export function JobSearchForm({
             ))}
           </div>
 
-          {/* Right side: Edit button & Search again icon button */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Right side: Edit button, quota indicator, & Search again icon button */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span
+              className={cn(
+                "text-[12px] tabular-nums select-none",
+                searchesRemaining === 0
+                  ? "text-danger font-medium"
+                  : "text-ink-soft"
+              )}
+            >
+              {searchesRemaining} of {searchesLimit} searches left today
+            </span>
+
             <Button
               variant="secondary"
               size="sm"
@@ -135,9 +148,17 @@ export function JobSearchForm({
               <button
                 type="button"
                 onClick={onSearchAgain}
-                disabled={isSearching}
-                aria-label="Search again"
-                title="Search again"
+                disabled={isSearching || searchesRemaining === 0}
+                aria-label={
+                  searchesRemaining === 0
+                    ? "Daily search limit reached"
+                    : "Search again"
+                }
+                title={
+                  searchesRemaining === 0
+                    ? "Daily search limit reached"
+                    : "Search again"
+                }
                 className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-ink-soft hover:text-ink hover:bg-sunken border border-rule/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:outline-2 focus-visible:outline-primary"
               >
                 <RotateCw
@@ -373,29 +394,42 @@ export function JobSearchForm({
             </div>
           )}
 
-          {/* Footer: Quiet "Reset" text button and primary "Find jobs" button */}
-          <div className="pt-3 border-t border-rule flex items-center justify-between gap-3">
+          {/* Footer: Quiet "Reset" text button, quota indicator, and primary "Find jobs" button */}
+          <div className="pt-3 border-t border-rule flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <button
               type="button"
               onClick={onResetToDefaults}
               disabled={isSearching}
-              className="text-[13px] text-ink-soft hover:text-ink font-medium p-1 transition-colors cursor-pointer disabled:opacity-50"
+              className="text-[13px] text-ink-soft hover:text-ink font-medium p-1 transition-colors cursor-pointer disabled:opacity-50 self-start sm:self-auto"
             >
               Reset
             </button>
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              loading={isSearching}
-              showLabelOnLoading={true}
-              disabled={disabled || isSearching}
-              className="w-full sm:w-auto min-w-[130px]"
-            >
-              <Search className="w-4 h-4 mr-1.5 shrink-0" aria-hidden="true" />
-              <span>{isSearching ? "Searching" : "Find jobs"}</span>
-            </Button>
+            <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+              <span
+                className={cn(
+                  "text-[12px] tabular-nums select-none",
+                  searchesRemaining === 0
+                    ? "text-danger font-medium"
+                    : "text-ink-soft"
+                )}
+              >
+                {searchesRemaining} of {searchesLimit} searches left today
+              </span>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                loading={isSearching}
+                showLabelOnLoading={true}
+                disabled={disabled || isSearching || searchesRemaining === 0}
+                className="w-full sm:w-auto min-w-[130px]"
+              >
+                <Search className="w-4 h-4 mr-1.5 shrink-0" aria-hidden="true" />
+                <span>{isSearching ? "Searching" : "Find jobs"}</span>
+              </Button>
+            </div>
           </div>
         </form>
       )}

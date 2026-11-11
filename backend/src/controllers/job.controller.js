@@ -1,5 +1,6 @@
 import Resume from "../models/Resume.js";
 import Application from "../models/Application.js";
+import JobSearchUsage from "../models/JobSearchUsage.js";
 import JobSearchCache, {
   computeSearchHash,
   trimUserSearches,
@@ -77,6 +78,21 @@ function attachTrackedApplicationIds(jobs, map) {
 }
 
 /**
+ * Helper to compute remaining searches in current rolling 24-hour window.
+ */
+async function getSearchesRemaining(userId) {
+  const windowMs = config.jobSearchDailyWindowMs || 24 * 60 * 60 * 1000;
+  const windowStart = new Date(Date.now() - windowMs);
+  const usedCount = await JobSearchUsage.countDocuments({
+    userId,
+    createdAt: { $gte: windowStart },
+  });
+  const limit = config.jobSearchDailyLimit || 5;
+  const remaining = Math.max(0, limit - usedCount);
+  return { remaining, limit, usedCount };
+}
+
+/**
  * Builds the standard search response object.
  */
 function buildSearchResponse({
@@ -93,6 +109,8 @@ function buildSearchResponse({
   rankedBy,
   rankStatus,
   generatedAt,
+  remaining,
+  dailyLimit,
 }) {
   const docCreatedAt = searchDoc?.createdAt
     ? new Date(searchDoc.createdAt)
@@ -111,6 +129,8 @@ function buildSearchResponse({
     rankedBy,
     rankStatus,
     sources,
+    remaining: typeof remaining === "number" ? remaining : undefined,
+    dailyLimit: typeof dailyLimit === "number" ? dailyLimit : undefined,
   };
 
   return {
@@ -127,6 +147,8 @@ function buildSearchResponse({
     rankedBy,
     rankStatus,
     sources,
+    remaining: typeof remaining === "number" ? remaining : undefined,
+    dailyLimit: typeof dailyLimit === "number" ? dailyLimit : undefined,
   };
 }
 
@@ -202,6 +224,10 @@ export async function searchJobs(req, res, next) {
           trackedMap
         );
 
+        const { remaining, limit } = await getSearchesRemaining(userId);
+        res.set("X-Searches-Remaining", String(remaining));
+        res.set("X-Searches-Limit", String(limit));
+
         return res.status(200).json(
           buildSearchResponse({
             searchDoc: existingCache,
@@ -217,6 +243,8 @@ export async function searchJobs(req, res, next) {
             rankedBy: existingCache.rankedBy || "local",
             rankStatus: existingCache.rankStatus || "skipped",
             generatedAt: new Date(cacheTimestamp).toISOString(),
+            remaining,
+            dailyLimit: limit,
           })
         );
       }
@@ -357,6 +385,16 @@ export async function searchJobs(req, res, next) {
     // Bounded cache growth: keep at most 10 searches per user
     await trimUserSearches(userId);
 
+    // Record fresh search usage in rolling 24h window
+    await JobSearchUsage.create({
+      userId,
+      createdAt: now,
+    });
+
+    const { remaining, limit } = await getSearchesRemaining(userId);
+    res.set("X-Searches-Remaining", String(remaining));
+    res.set("X-Searches-Limit", String(limit));
+
     const { map: trackedMap, set: trackedSet } = await getTrackedAppsInfo(
       userId
     );
@@ -382,6 +420,8 @@ export async function searchJobs(req, res, next) {
         rankedBy,
         rankStatus,
         generatedAt: now.toISOString(),
+        remaining,
+        dailyLimit: limit,
       })
     );
   } catch (err) {
@@ -502,6 +542,10 @@ export async function getLatestSearch(req, res, next) {
       trackedMap
     );
 
+    const { remaining, limit } = await getSearchesRemaining(userId);
+    res.set("X-Searches-Remaining", String(remaining));
+    res.set("X-Searches-Limit", String(limit));
+
     return res.status(200).json(
       buildSearchResponse({
         searchDoc,
@@ -519,6 +563,8 @@ export async function getLatestSearch(req, res, next) {
         generatedAt: new Date(
           searchDoc.updatedAt || searchDoc.createdAt
         ).toISOString(),
+        remaining,
+        dailyLimit: limit,
       })
     );
   } catch (err) {
