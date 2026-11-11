@@ -47,3 +47,5 @@ frontend/e2e/
 # Prompt and audit markdown files
 part*.md
 *prompt*.md
+audit/
+backend/scripts/test-*.js
